@@ -82,6 +82,80 @@ function normalizeDate(str) {
   return str.trim();
 }
 
+function parseDestinatarioFromText(text) {
+  if (!text) return "No legible";
+  const clean = text.replace(/\s+/g, ' ');
+
+  if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(clean)) {
+    return "Empresa";
+  }
+
+  const normalizarDest = (val) => {
+    let limpio = val.replace(/^(?:apellido\s*y\s*nombre|titular|nombre)[:\s]*/i, '').trim();
+    if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(limpio)) {
+      return "Empresa";
+    }
+    return limpio;
+  };
+
+  let m = clean.match(/\bbeneficiari[oa][:s\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+  m = clean.match(/cuenta\s+destino[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+  m = clean.match(/\bpara[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+  m = clean.match(/destinatari[oa][:s\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+  m = clean.match(/transferencia\s+enviada\s+a[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\$|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+  return "No identificado";
+}
+
+function detectBancoOrigenFromText(text) {
+  if (!text) return "No identificado";
+  const clean = text.replace(/\s+/g, ' ');
+
+  if (/\b(?:credicoop|banco\s*credicoop)\b/i.test(clean)) return "Banco Credicoop";
+  if (/\b(?:mercado\s*pago|mercadopago)\b/i.test(clean)) return "Mercado Pago";
+  if (/\b(?:naranja\s*x|naranjax|naranja\)\(|naranja\s*digital)\b/i.test(clean)) return "Naranja X";
+  if (/\b(?:cuenta\s*dni|cuenta\s+comprobante|banco\s*provincia|bapro)\b/i.test(clean) || /código\s+de\s+referencia\s+\d{8}/i.test(clean)) return "Cuenta DNI";
+  if (/\b(?:personal\s*pay|personalpay)\b/i.test(clean)) return "Personal Pay";
+  if (/\b(?:banco\s*(?:de\s+la\s+)?naci[oó]n|bna\+?)\b/i.test(clean)) return "Banco Nación";
+  if (/\bgalicia\b/i.test(clean) && !/(?:destino|beneficiario|para)[^.]*galicia/i.test(clean)) return "Galicia";
+  if (/\b(?:bbva|franc[eé]s)\b/i.test(clean) && !/(?:destino|beneficiario|para)[^.]*bbva/i.test(clean)) return "BBVA";
+  if (/\bbrubank\b/i.test(clean)) return "Brubank";
+  if (/\bual[aá]\b/i.test(clean)) return "Ualá";
+  if (/\b(?:macro\s*bma|banco\s*macro|macro\s*online)\b/i.test(clean)) return "Banco Macro";
+  if (/\bpatagonia\b/i.test(clean)) return "Banco Patagonia";
+  if (/\b(?:banco\s*ciudad)\b/i.test(clean)) return "Banco Ciudad";
+  if (/\bcomafi\b/i.test(clean)) return "Banco Comafi";
+  if (/\bsupervielle\b/i.test(clean)) return "Supervielle";
+
+  if (/\b00000031\d{14}\b/.test(clean)) return "Mercado Pago";
+  if (/\b453\d{19}\b/.test(clean)) return "Naranja X";
+  if (/\b00000062\d{14}\b/.test(clean)) return "Personal Pay";
+  if (/\b00000079\d{14}\b/.test(clean)) return "Ualá";
+
+  if (/\bonline\s+banking\s+personas\b/i.test(clean) || /\bcuenta\s+d[eé]bito\b/i.test(clean) || /\bimporte\s+debitado\b/i.test(clean)) {
+    return "Santander";
+  }
+  const sinDestino = clean.replace(/(?:beneficiario|para|destino|banco\s+de\s+destino|banco\s+destino)[^.]*(?:santander|perla\s*negra)/gi, '');
+  if (/\bsantander\b/i.test(sinDestino)) {
+    return "Santander";
+  }
+  return "No identificado";
+}
+
 function extractDateFromText(text) {
   if (!text) return "";
   const clean = text.replace(/\s+/g, ' ');
@@ -379,6 +453,8 @@ async function generarExcelCampana(campanaCode) {
     }
 
     const fecha = extractDateFromText(rawText);
+    const desde = detectBancoOrigenFromText(rawText);
+    const para = parseDestinatarioFromText(rawText);
     const realiza = extractRealizaFromText(rawText);
     const codigoRef = extractCodigoReferenciaFromText(rawText);
 
@@ -389,6 +465,8 @@ async function generarExcelCampana(campanaCode) {
       "IMPORTE": parsedFile.importe,
       "LIDER": lider,
       "REVENDEDOR": parsedFile.revendedor,
+      "DESDE": desde,
+      "PARA": para,
       "REALIZA": realiza,
       "CODIGO DE REFERENCIA": codigoRef
     });
@@ -408,6 +486,8 @@ async function generarExcelCampana(campanaCode) {
       "IMPORTE",
       "LIDER",
       "REVENDEDOR",
+      "DESDE",
+      "PARA",
       "REALIZA",
       "CODIGO DE REFERENCIA"
     ]
@@ -421,6 +501,8 @@ async function generarExcelCampana(campanaCode) {
     { wch: 14 }, // IMPORTE
     { wch: 18 }, // LIDER
     { wch: 28 }, // REVENDEDOR
+    { wch: 20 }, // DESDE
+    { wch: 20 }, // PARA
     { wch: 32 }, // REALIZA
     { wch: 28 }  // CODIGO DE REFERENCIA
   ];
