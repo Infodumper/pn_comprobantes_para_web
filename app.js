@@ -85,7 +85,10 @@ const dom = {
   statCampanaTotal: document.getElementById("stat-campana-total"),
   statCampanaSubidos: document.getElementById("stat-campana-subidos"),
   statCampanaFaltantes: document.getElementById("stat-campana-faltantes"),
+  btnSubirTodo: document.getElementById("btn-subir-todo"),
+  labelSubirTodo: document.getElementById("label-subir-todo"),
   btnSubirFaltantes: document.getElementById("btn-subir-faltantes"),
+  labelSubirSeleccionados: document.getElementById("label-subir-seleccionados"),
   btnGenerarExcelCampana: document.getElementById("btn-generar-excel-campana"),
 
   // Barra de progreso de subida
@@ -506,10 +509,19 @@ function setupCampanaModule() {
     });
   }
 
-  // Botón para subir comprobantes seleccionados (máx. 10 a la vez)
-  dom.btnSubirFaltantes.addEventListener("click", async () => {
-    await subirComprobantesFaltantes();
-  });
+  // Botón para Subir Todo (todos los pendientes de la campaña en lotes de 10)
+  if (dom.btnSubirTodo) {
+    dom.btnSubirTodo.addEventListener("click", async () => {
+      await subirComprobantesFaltantes(true);
+    });
+  }
+
+  // Botón para subir únicamente los comprobantes seleccionados con checkbox
+  if (dom.btnSubirFaltantes) {
+    dom.btnSubirFaltantes.addEventListener("click", async () => {
+      await subirComprobantesFaltantes(false);
+    });
+  }
 
   // Botón para exportar comprobantes de la campaña a Excel
   if (dom.btnGenerarExcelCampana) {
@@ -756,18 +768,29 @@ function actualizarEstadoBotonSubir() {
 
   const cantSeleccionados = seleccionadosPendientes.length;
   const cantPendientesTotales = state.campanaData.totalPendientes;
-  const cantASubir = cantSeleccionados > 0 ? cantSeleccionados : cantPendientesTotales;
 
-  dom.btnSubirFaltantes.disabled = cantASubir === 0 || state.isUploadingBatch;
+  // 1. Botón "Subir Todo" (todos los comprobantes pendientes de la campaña)
+  if (dom.btnSubirTodo) {
+    dom.btnSubirTodo.disabled = cantPendientesTotales === 0 || state.isUploadingBatch;
+    if (dom.labelSubirTodo) {
+      if (cantPendientesTotales > 0) {
+        dom.labelSubirTodo.textContent = `Subir Todo (${cantPendientesTotales} pendientes)`;
+      } else {
+        dom.labelSubirTodo.textContent = "Todos los comprobantes subidos ✓";
+      }
+    }
+  }
 
-  const label = dom.btnSubirFaltantes.querySelector(".btn__label");
-  if (label) {
+  // 2. Botón "Subir Seleccionados" (se muestra si el usuario tildó casillas)
+  if (dom.btnSubirFaltantes) {
     if (cantSeleccionados > 0) {
-      label.textContent = `Subir ${cantSeleccionados} Comprobante${cantSeleccionados > 1 ? "s Seleccionados" : " Seleccionado"}`;
-    } else if (cantPendientesTotales > 0) {
-      label.textContent = `Subir ${cantPendientesTotales} Comprobante${cantPendientesTotales > 1 ? "s Faltantes" : " Faltante"}`;
+      dom.btnSubirFaltantes.style.display = "inline-flex";
+      dom.btnSubirFaltantes.disabled = state.isUploadingBatch;
+      if (dom.labelSubirSeleccionados) {
+        dom.labelSubirSeleccionados.textContent = `Subir ${cantSeleccionados} Seleccionado${cantSeleccionados > 1 ? "s" : ""}`;
+      }
     } else {
-      label.textContent = "Todos los comprobantes ya están subidos";
+      dom.btnSubirFaltantes.style.display = "none";
     }
   }
 
@@ -951,37 +974,29 @@ function renderTablaArchivosCampana() {
     const dest = isEmpresa ? "Empresa" : rawDest;
     const destClase = isEmpresa ? "dest-perla" : (/no\s*(?:identificado|legible)/i.test(dest) ? "dest-desconocido" : "dest-otro");
 
-    // Comprobación de coincidencia de los tres valores de importe:
-    // 1. Parte numérica del nombre tras la campaña (montoNombre)
-    // 2. Importe en datos de la fila (montoCliente)
-    // 3. Importe leído en la imagen/PDF (montoDoc)
-    const matchNombre = item.nombre.match(/^C\d{4}\s+([\d.]+)/i);
-    const montoNombre = matchNombre ? normalizarMonto(matchNombre[1]) : null;
-    const montoCliente = normalizarMonto(item.monto);
+    // Comprobación de importe (soporta tanto C1126 como 1126 sin la C):
+    const matchNombre = item.nombre.match(/^[a-zA-Z]?\d{4}\s+([\d.]+)/i);
+    const montoNombre = matchNombre ? normalizarMonto(matchNombre[1]) : normalizarMonto(item.monto);
     const montoDoc = (item.montoDoc !== undefined && item.montoDoc !== null) ? normalizarMonto(item.montoDoc) : null;
 
-    const coincidenTres = Boolean(
+    // Solo se considera discrepancia si AMBOS importes fueron leídos y son numéricamente diferentes
+    // (ej: si el nombre dice 6000 y el comprobante pone 6.000, ambos se normalizan a 6000 y coinciden)
+    const hayDiscrepanciaReal = Boolean(
       montoNombre !== null &&
-      montoCliente !== null &&
       montoDoc !== null &&
-      montoNombre === montoCliente &&
-      montoNombre === montoDoc
+      montoNombre !== montoDoc
     );
 
-    const claseTitulo = coincidenTres ? "" : "receipt-file-title--mismatch";
-    const colorTitulo = !coincidenTres 
+    const claseTitulo = hayDiscrepanciaReal ? "receipt-file-title--mismatch" : "";
+    const colorTitulo = hayDiscrepanciaReal 
       ? "#DC2626" 
       : (isSubido ? "#6B7280" : "var(--azul-kaizuna)");
 
-    let motivoTooltip = "Importe verificado: coincide en nombre, registro y comprobante.";
-    if (!coincidenTres) {
-      if (montoDoc === null) {
-        motivoTooltip = `⚠️ Discrepancia: Nombre dice $${montoNombre || '?'} pero no se detectó el importe en el comprobante.`;
-      } else if (montoNombre !== montoDoc) {
-        motivoTooltip = `⚠️ Discrepancia: El nombre dice $${montoNombre} pero el comprobante dice $${montoDoc}.`;
-      } else {
-        motivoTooltip = `⚠️ Discrepancia de importes entre los tres valores ($${montoNombre} vs $${montoCliente} vs $${montoDoc}).`;
-      }
+    let motivoTooltip = "Importe correcto";
+    if (hayDiscrepanciaReal) {
+      motivoTooltip = `⚠️ Discrepancia real: El nombre dice $${montoNombre} pero el comprobante dice $${montoDoc}.`;
+    } else if (montoNombre) {
+      motivoTooltip = `Importe: $${montoNombre}`;
     }
 
     // Estado con inicial única y color: P (naranja), E (verde), F (rojo)
@@ -1004,7 +1019,7 @@ function renderTablaArchivosCampana() {
             <span class="${claseTitulo}" style="color: ${colorTitulo}; font-weight: 600; font-size: 0.92rem;" title="${escaparAtributo(motivoTooltip)}">
               ${escaparHtml(item.nombre)}
             </span>
-            ${!coincidenTres ? `<span class="mismatch-badge" title="${escaparAtributo(motivoTooltip)}">⚠️ Importe</span>` : ''}
+            ${hayDiscrepanciaReal ? `<span class="mismatch-badge" title="${escaparAtributo(motivoTooltip)}">⚠️ Importe</span>` : ''}
           </div>
           <div class="receipt-file-destinatario">
             <span class="destinatario-label">DESDE:</span>
@@ -1050,28 +1065,36 @@ window.toggleSeleccionArchivo = function (nombre, checked) {
 };
 
 /**
- * Procesa y sube los comprobantes pendientes de la campaña en bloques internos de hasta 10
+ * Procesa y sube comprobantes pendientes en bloques internos de hasta 10
+ * @param {boolean} forzarTodo Si es true, sube todos los comprobantes pendientes de la campaña
  */
-async function subirComprobantesFaltantes() {
+async function subirComprobantesFaltantes(forzarTodo = false) {
   if (!state.campanaData || state.isUploadingBatch) return;
 
-  // Si el usuario seleccionó archivos específicos, se suben esos; si no, todos los pendientes
-  let aSubir = state.campanaData.archivos.filter(
-    a => a.estado === "PENDIENTE" && state.selectedFiles.has(a.nombre)
-  );
-
-  if (!aSubir.length) {
+  let aSubir = [];
+  if (!forzarTodo && state.selectedFiles.size > 0) {
+    aSubir = state.campanaData.archivos.filter(
+      a => a.estado === "PENDIENTE" && state.selectedFiles.has(a.nombre)
+    );
+  } else {
+    // Subir Todo: todos los comprobantes que aún no se han subido
     aSubir = state.campanaData.archivos.filter(a => a.estado === "PENDIENTE");
   }
 
   if (!aSubir.length) {
-    mostrarAlertaCampana("No quedan comprobantes pendientes por subir.", "info");
+    mostrarAlertaCampana("No quedan comprobantes pendientes por subir en esta campaña.", "info");
     return;
   }
 
   state.isUploadingBatch = true;
-  dom.btnSubirFaltantes.disabled = true;
-  dom.btnSubirFaltantes.classList.add("is-loading");
+  if (dom.btnSubirTodo) {
+    dom.btnSubirTodo.disabled = true;
+    dom.btnSubirTodo.classList.add("is-loading");
+  }
+  if (dom.btnSubirFaltantes) {
+    dom.btnSubirFaltantes.disabled = true;
+    dom.btnSubirFaltantes.classList.add("is-loading");
+  }
   dom.progresoSubidaCard.hidden = false;
 
   const total = aSubir.length;
@@ -1147,7 +1170,8 @@ async function subirComprobantesFaltantes() {
   }, 4000);
 
   state.isUploadingBatch = false;
-  dom.btnSubirFaltantes.classList.remove("is-loading");
+  if (dom.btnSubirTodo) dom.btnSubirTodo.classList.remove("is-loading");
+  if (dom.btnSubirFaltantes) dom.btnSubirFaltantes.classList.remove("is-loading");
   renderResumenCampana(state.campanaData);
   renderTablaArchivosCampana();
   actualizarEstadoBotonSubir();

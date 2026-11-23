@@ -202,17 +202,19 @@ function parseFilenameDetails(filename, defaultCampana = "") {
   const ext = path.extname(filename);
   const baseName = path.basename(filename, ext).trim();
 
-  // Ejemplo: "C1026 6500 SOTO" o "c1026 114400 YESI ARROYOS"
-  const regex = /^([a-zA-Z]\d{4})\s+([\d.]+)\s+(.+)$/i;
+  // Ejemplo: "C1026 6500 SOTO" o "1126 6000 ELIANA DA LUZ"
+  const regex = /^([a-zA-Z]?\d{4})\s+([\d.]+)\s+(.+)$/i;
   const m = baseName.match(regex);
   if (m) {
-    // Normalizar importe: si viene "6.500" o "6500", quitar puntos de miles
     let impRaw = m[2].replace(/\./g, '');
     let importeNum = parseInt(impRaw, 10);
     if (isNaN(importeNum)) importeNum = m[2];
 
+    let cod = m[1].toUpperCase();
+    if (!cod.startsWith('C') && /^\d{4}$/.test(cod)) cod = 'C' + cod;
+
     return {
-      campana: m[1].toUpperCase(),
+      campana: cod,
       importe: importeNum,
       revendedor: m[3].trim().toUpperCase()
     };

@@ -251,8 +251,8 @@
             </p>
           </div>
           <div class="hero-card__actions">
-            <span class="drive-path-pill" id="drive-base-path-display" title="Ruta base de Google Drive">
-              📁 Drive: C:\PerlaNegra\02 PAGOS
+            <span class="drive-path-pill" id="drive-base-path-display" title="Google Drive Conectado">
+              📁 DRIVE
             </span>
           </div>
         </div>
@@ -334,16 +334,20 @@
             </div>
           </div>
 
-          <!-- Botón de acción masiva: Subir sólo los que falten y Generar Excel -->
+          <!-- Botones de acción masiva: Subir Todo, Subir Seleccionados y Exportar Excel -->
           <div class="client-summary__actions" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button type="button" class="btn btn--primary btn--lg" id="btn-subir-faltantes">
+            <button type="button" class="btn btn--primary btn--lg" id="btn-subir-todo" title="Subir todos los comprobantes que aún no se han subido (en lotes internos de 10)">
               <span class="btn__spinner" aria-hidden="true"></span>
               <svg class="btn__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="17 8 12 3 7 8"></polyline>
                 <line x1="12" y1="3" x2="12" y2="15"></line>
               </svg>
-              <span class="btn__label">Subir Comprobantes Faltantes</span>
+              <span class="btn__label" id="label-subir-todo">Subir Todo</span>
+            </button>
+            <button type="button" class="btn btn--outline btn--lg" id="btn-subir-faltantes" style="display: none;" title="Subir únicamente los comprobantes marcados con la casilla">
+              <span class="btn__spinner" aria-hidden="true"></span>
+              <span class="btn__label" id="label-subir-seleccionados">Subir Seleccionados</span>
             </button>
             <button type="button" class="btn btn--secondary btn--lg" id="btn-generar-excel-campana" title="Generar y descargar Excel con el detalle de comprobantes">
               <span class="btn__spinner" aria-hidden="true"></span>

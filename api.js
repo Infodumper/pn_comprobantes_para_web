@@ -292,11 +292,14 @@ function findCampaignFolder(basePath, campanaCode) {
 function parseReceiptFilename(filename, campana) {
   const ext = path.extname(filename);
   const baseName = path.basename(filename, ext).trim();
-  const regex = /^([a-zA-Z]\d{4})\s+([\d.]+)\s+(.+)$/i;
+  // Acepta C1126 o 1126 (con o sin letra C)
+  const regex = /^([a-zA-Z]?\d{4})\s+([\d.]+)\s+(.+)$/i;
   const m = baseName.match(regex);
   if (m) {
+    let cod = m[1].toUpperCase();
+    if (!cod.startsWith('C') && /^\d{4}$/.test(cod)) cod = 'C' + cod;
     return {
-      campana: m[1].toUpperCase(),
+      campana: cod,
       monto: m[2],
       clienteOReferencia: m[3].trim()
     };
