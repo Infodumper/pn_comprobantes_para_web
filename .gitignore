@@ -1,16 +1,19 @@
 # Dependencias
 node_modules/
 
-# Archivos generados y cachés locales con datos de clientes
+# Entorno y configuración local
+.env
+.env.local
+config.json
+
+# Archivos generados y cachés con datos
 Excels/
 ocr_full_cache.json
 destinatarios_cache.json
 registro_subidos.json
 
-# Logs y SO
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Sistema y logs
+*.log
 Thumbs.db
 Desktop.ini
 .DS_Store
