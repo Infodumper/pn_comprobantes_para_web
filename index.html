@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Comprobantes | Perla Negra SRL</title>
+  
+  <!-- Tipografía institucional: Crimson Pro + Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,500;0,600;0,700;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Header / Barra de Navegación -->
+  <header class="header">
+    <div class="header__container">
+      <div class="header__brand">
+        <div class="header__logo-wrap">
+          <img src="assets/logopn.png" alt="Perla Negra SRL" class="header__logo header__logo--pn" />
+        </div>
+        <div class="header__divider" aria-hidden="true"></div>
+        <div class="header__titles">
+          <h1 class="header__title">Comprobantes Web</h1>
+          <span class="header__subtitle">Perla Negra SRL</span>
+        </div>
+      </div>
+
+      <!-- Menú principal -->
+      <nav class="nav" aria-label="Navegación principal">
+        <button type="button" class="nav__btn is-active" id="btn-tab-consultar" data-target="seccion-consultar">
+          <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          <span>Ver Comprobantes Cargados</span>
+        </button>
+
+        <button type="button" class="nav__btn" id="btn-tab-cargar" data-target="seccion-cargar">
+          <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Cargar Comprobantes</span>
+        </button>
+      </nav>
+
+      <!-- Estado de conexión API -->
+      <div class="header__status" id="api-status-badge" title="Conexión con Apps Script Perla Negra">
+        <span class="status-dot"></span>
+        <span class="status-label">API Conectada</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- ========================================================
+         VISTA 1: VER COMPROBANTES CARGADOS (SECCIÓN PRINCIPAL)
+         ======================================================== -->
+    <section id="seccion-consultar" class="view-panel is-active">
+      <div class="panel-card hero-card">
+        <div class="hero-card__header">
+          <div class="hero-card__info">
+            <span class="badge badge--accent">Consulta de Comprobantes</span>
+            <h2 class="view-title">Ver Comprobantes Cargados</h2>
+            <p class="view-description">
+              Ingresá tu DNI para conectarte con la base de Perla Negra y visualizar el listado de comprobantes registrados.
+            </p>
+          </div>
+          <div class="hero-card__actions">
+            <a href="https://catalogoperlanegra.com.ar/comprobantes/consulta.html" target="_blank" rel="noopener noreferrer" class="btn btn--outline" title="Abrir página oficial de consulta en Perla Negra">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              <span>Abrir consulta.html oficial</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Formulario de Consulta -->
+        <form id="form-consulta" class="search-box" novalidate>
+          <div class="search-box__input-wrap">
+            <label for="input-dni-consulta" class="search-box__label">DNI del Cliente</label>
+            <div class="input-with-icon">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input
+                id="input-dni-consulta"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="Ejemplo: 30123456 (con o sin puntos)"
+                class="form-control"
+                maxlength="20"
+                required
+              />
+              <button type="button" id="btn-clear-dni" class="btn-clear" title="Limpiar" hidden>&times;</button>
+            </div>
+          </div>
+
+          <div class="search-box__submit-wrap">
+            <!-- Botón de consulta para visualizar el listado -->
+            <button type="submit" class="btn btn--primary btn--lg" id="btn-consultar-bajar">
+              <span class="btn__spinner" aria-hidden="true"></span>
+              <svg class="btn__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span class="btn__label">Consultar Comprobantes</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Historial rápido de DNI consultados -->
+        <div id="quick-dni-container" class="quick-tags" hidden>
+          <span class="quick-tags__title">Consultas recientes:</span>
+          <div id="quick-tags-list" class="quick-tags__list"></div>
+        </div>
+
+        <!-- Alertas de estado / retroalimentación -->
+        <div id="estado-consulta" class="alert-box" hidden role="status" aria-live="polite"></div>
+      </div>
+
+      <!-- Contenedor de Resultados -->
+      <div id="contenedor-resultados" class="results-container" hidden>
+        <!-- Resumen del cliente y estadísticas -->
+        <div class="client-summary-card">
+          <div class="client-summary__left">
+            <div class="client-avatar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </div>
+            <div class="client-info">
+              <span class="client-info__label">Cliente</span>
+              <h3 class="client-info__name" id="resultado-nombre-cliente">—</h3>
+              <p class="client-info__dni">DNI: <strong id="resultado-dni-cliente">—</strong></p>
+            </div>
+          </div>
+
+          <!-- Métricas -->
+          <div class="client-stats">
+            <div class="stat-item">
+              <span class="stat-item__value" id="stat-total-comprobantes">0</span>
+              <span class="stat-item__label">Comprobantes</span>
+            </div>
+            <div class="stat-item stat-item--highlight">
+              <span class="stat-item__value" id="stat-monto-total">$ 0</span>
+              <span class="stat-item__label">Total Registrado</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-item__value" id="stat-meses-activos">0</span>
+              <span class="stat-item__label">Meses</span>
+            </div>
+          </div>
+
+          <!-- Botones de Descarga / Exportación -->
+          <div class="client-summary__actions">
+            <button type="button" class="btn btn--secondary" id="btn-exportar-excel" title="Descargar planilla Excel (.xls)">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="8" y1="13" x2="16" y2="13"></line>
+                <line x1="8" y1="17" x2="16" y2="17"></line>
+              </svg>
+              <span>Exportar Listado (Excel)</span>
+            </button>
+            <button type="button" class="btn btn--outline" id="btn-exportar-json" title="Descargar estructura de datos JSON">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Exportar JSON</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filtro y selector de vista -->
+        <div class="view-toolbar">
+          <div class="view-toolbar__search">
+            <input type="text" id="filtro-texto-resultados" placeholder="Filtrar por archivo, monto o fecha..." class="form-control form-control--sm" />
+          </div>
+          <div class="view-toolbar__toggle">
+            <button type="button" class="toggle-btn is-active" id="btn-vista-agrupada" title="Vista por meses">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span>Por Meses</span>
+            </button>
+            <button type="button" class="toggle-btn" id="btn-vista-tabla" title="Vista tabla continua">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+              <span>Tabla</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Contenedores de visualización -->
+        <div id="vista-meses-container" class="cards-months-container"></div>
+        <div id="vista-tabla-container" class="table-container" hidden>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha y Hora</th>
+                <th>Archivo</th>
+                <th>Tipo</th>
+                <th class="text-right">Monto</th>
+                <th class="text-center">Comprobante</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-comprobantes-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================
+         VISTA 2: CARGAR COMPROBANTES
+         ======================================================== -->
+    <!-- ========================================================
+         VISTA 2: CARGAR COMPROBANTES (AUTOMATIZACIÓN POR CAMPAÑA)
+         ======================================================== -->
+    <section id="seccion-cargar" class="view-panel">
+      <div class="panel-card hero-card">
+        <div class="hero-card__header">
+          <div class="hero-card__info">
+            <span class="badge badge--primary">Automatización</span>
+            <h2 class="view-title">Carga Automática por Campaña</h2>
+            <p class="view-description">
+              Ingresá el número de Campaña (formato <strong>CnnAA</strong>, ej: <code>C1026</code> o <code>C1326</code>) para acceder a su carpeta en Google Drive y subir únicamente los comprobantes que falten, manteniendo un registro histórico.
+            </p>
+          </div>
+          <div class="hero-card__actions">
+            <span class="drive-path-pill" id="drive-base-path-display" title="Ruta base de Google Drive">
+              📁 Drive: C:\PerlaNegra\02 PAGOS
+            </span>
+          </div>
+        </div>
+
+        <!-- Caja de Selección de Campaña -->
+        <div class="search-box">
+          <div class="search-box__input-wrap">
+            <label for="input-campana-code" class="search-box__label">Número de Campaña (CnnAA)</label>
+            <div class="input-with-icon">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <input
+                id="input-campana-code"
+                type="text"
+                placeholder="Ejemplo: C1026 o C1326"
+                class="form-control"
+                maxlength="10"
+                style="text-transform: uppercase;"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="search-box__submit-wrap">
+            <button type="button" class="btn btn--primary btn--lg" id="btn-escanear-campana">
+              <span class="btn__spinner" aria-hidden="true"></span>
+              <svg class="btn__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span class="btn__label">Escanear Carpeta de Campaña</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Campañas detectadas automáticamente en Google Drive -->
+        <div class="quick-tags" id="campanas-detectadas-wrap">
+          <span class="quick-tags__title">Campañas en Drive:</span>
+          <div id="campanas-tags-list" class="quick-tags__list">
+            <span style="font-size: 0.8rem; color: var(--gris-medio);">Buscando carpetas...</span>
+          </div>
+        </div>
+
+        <!-- Mensajes de estado -->
+        <div id="estado-escanear-campana" class="alert-box" hidden role="status" aria-live="polite"></div>
+      </div>
+
+      <!-- Panel de Resultados del Escaneo de Campaña -->
+      <div id="contenedor-resultado-campana" class="results-container" hidden>
+        <!-- Resumen de Campaña -->
+        <div class="client-summary-card">
+          <div class="client-summary__left">
+            <div class="client-avatar" style="background-color: var(--verde-suave-light); color: var(--verde-suave);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </div>
+            <div class="client-info">
+              <span class="client-info__label">Campaña Escaneada</span>
+              <h3 class="client-info__name" id="resumen-campana-codigo">C1026</h3>
+              <p class="client-info__dni" id="resumen-campana-carpeta">Carpeta: —</p>
+            </div>
+          </div>
+
+          <!-- Métricas del escaneo -->
+          <div class="client-stats">
+            <div class="stat-item">
+              <span class="stat-item__value" id="stat-campana-total">0</span>
+              <span class="stat-item__label">Encontrados</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-item__value" style="color: var(--verde-suave);" id="stat-campana-subidos">0</span>
+              <span class="stat-item__label">Ya Subidos</span>
+            </div>
+            <div class="stat-item stat-item--highlight">
+              <span class="stat-item__value" style="color: var(--azul-kaizuna);" id="stat-campana-faltantes">0</span>
+              <span class="stat-item__label">Faltan Subir</span>
+            </div>
+          </div>
+
+          <!-- Botón de acción masiva: Subir sólo los que falten y Generar Excel -->
+          <div class="client-summary__actions" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <button type="button" class="btn btn--primary btn--lg" id="btn-subir-faltantes">
+              <span class="btn__spinner" aria-hidden="true"></span>
+              <svg class="btn__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span class="btn__label">Subir Comprobantes Faltantes</span>
+            </button>
+            <button type="button" class="btn btn--secondary btn--lg" id="btn-generar-excel-campana" title="Generar y descargar Excel con el detalle de comprobantes">
+              <span class="btn__spinner" aria-hidden="true"></span>
+              <svg class="btn__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              <span class="btn__label">Exportar Excel</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Barra de Progreso de Subida en Vivo -->
+        <div id="progreso-subida-card" class="panel-card" style="padding: 1.25rem; margin-bottom: 1.25rem;" hidden>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <strong style="color: var(--azul-kaizuna);" id="progreso-titulo">Subiendo comprobantes faltantes...</strong>
+            <span style="font-size: 0.85rem; font-weight: 600;" id="progreso-porcentaje">0%</span>
+          </div>
+          <div class="progress-bar-container" style="height: 10px;">
+            <div class="progress-bar" id="barra-progreso-envio" style="width: 0%;"></div>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--gris-medio); margin-top: 0.5rem;" id="progreso-archivo-actual">Preparando archivos...</p>
+        </div>
+
+        <!-- Filtros de la lista de archivos escaneados -->
+        <div class="view-toolbar">
+          <div class="view-toolbar__search">
+            <input type="text" id="filtro-archivos-campana" placeholder="Filtrar por nombre o cliente..." class="form-control form-control--sm" />
+          </div>
+          <div class="view-toolbar__toggle">
+            <button type="button" class="toggle-btn is-active" id="filtro-tab-todos">
+              <span>Todos (<span id="count-badge-todos">0</span>)</span>
+            </button>
+            <button type="button" class="toggle-btn" id="filtro-tab-faltantes">
+              <span>Faltantes (<span id="count-badge-faltantes">0</span>)</span>
+            </button>
+            <button type="button" class="toggle-btn" id="filtro-tab-subidos">
+              <span>Ya Subidos (<span id="count-badge-subidos">0</span>)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Barra de Organización por Lotes (interna, oculta en interfaz) -->
+        <div class="lotes-bar" id="lotes-bar" style="display: none;">
+          <div class="lotes-bar__left">
+            <div class="lotes-pills" id="lotes-pills-list"></div>
+          </div>
+          <div class="lotes-bar__right">
+            <button type="button" id="btn-seleccionar-10" style="display: none;"></button>
+          </div>
+        </div>
+
+        <!-- Tabla de comprobantes de la campaña -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 44px;" title="Marcar / Desmarcar pendientes de este lote (máx. 10)">
+                  <input type="checkbox" id="check-marcar-todos" class="form-checkbox" />
+                </th>
+                <th class="th-sortable" id="th-sort-nombre" title="Clic para ordenar por Nombre de Archivo">
+                  <div class="th-sort-wrapper">
+                    <span>Nombre del Archivo</span>
+                    <span class="sort-indicator" id="sort-ind-nombre">⇅</span>
+                  </div>
+                </th>
+                <th class="th-sortable-multi" id="th-sort-cliente-importe">
+                  <div class="th-sort-wrapper">
+                    <span class="sort-clickable" id="btn-sort-cliente" title="Clic para ordenar por Nombre del Cliente">
+                      Cliente <span class="sort-indicator" id="sort-ind-cliente">⇅</span>
+                    </span>
+                    <span class="sort-divider">/</span>
+                    <span class="sort-clickable" id="btn-sort-monto" title="Clic para ordenar por Importe">
+                      Importe <span class="sort-indicator" id="sort-ind-monto">⇅</span>
+                    </span>
+                  </div>
+                </th>
+                <th class="text-center" style="width: 80px;">Imagen</th>
+                <th class="text-center" style="width: 70px;">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-archivos-campana-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__container">
+      <p class="footer__text">
+        Sistema de Comprobantes Web · <strong>Perla Negra SRL</strong>
+      </p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

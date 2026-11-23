@@ -1,0 +1,710 @@
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const BASE_DIR = __dirname;
+const CONFIG_FILE = path.join(BASE_DIR, 'config.json');
+const REGISTRO_FILE = path.join(BASE_DIR, 'registro_subidos.json');
+const DESTINATARIOS_CACHE_FILE = path.join(BASE_DIR, 'destinatarios_cache.json');
+const API_URL_PERLA_NEGRA = "https://script.google.com/macros/s/AKfycbxMpLnqYvBR7A9OyliThTVm0VclyNIgRVflD9l3cM_2ry34971Z4lk5oJFT6Uw3S6ln/exec";
+
+function getDestinatariosCache() {
+  try {
+    if (fs.existsSync(DESTINATARIOS_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(DESTINATARIOS_CACHE_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error("Error leyendo destinatarios_cache.json:", e);
+  }
+  return {};
+}
+
+function saveDestinatariosCache(cache) {
+  try {
+    fs.writeFileSync(DESTINATARIOS_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+  } catch (e) {
+    console.error("Error guardando destinatarios_cache.json:", e);
+  }
+}
+
+function parseDestinatarioFromText(text) {
+  if (!text) return "No legible";
+  const clean = text.replace(/\s+/g, ' ');
+
+  // Si contiene alguna variación de Perla Negra, se unifica como "Empresa"
+  if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(clean)) {
+    return "Empresa";
+  }
+
+  const normalizarDest = (val) => {
+    let limpio = val.replace(/^(?:apellido\s*y\s*nombre|titular|nombre)[:\s]*/i, '').trim();
+    if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(limpio)) {
+      return "Empresa";
+    }
+    return limpio;
+  };
+
+  // 1. Regex para "Beneficiario ..."
+  let m = clean.match(/\bbeneficiari[oa][:s\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+
+  // 2. Regex para "Cuenta destino ..."
+  m = clean.match(/cuenta\s+destino[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+
+  // 3. Regex para "Para ..."
+  m = clean.match(/\bpara[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+
+  // 4. Regex para "Destinatario ..."
+  m = clean.match(/destinatari[oa][:s\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+
+  // 5. Regex para "Transferencia enviada a ..."
+  m = clean.match(/transferencia\s+enviada\s+a[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\$|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+
+  return "No identificado";
+}
+
+function detectBancoOrigenFromText(text) {
+  if (!text) return "No identificado";
+  const clean = text.replace(/\s+/g, ' ');
+
+  // 1. Bancos y Billeteras específicas de origen
+  if (/\b(?:credicoop|banco\s*credicoop)\b/i.test(clean)) return "Banco Credicoop";
+  if (/\b(?:mercado\s*pago|mercadopago)\b/i.test(clean)) return "Mercado Pago";
+  if (/\b(?:naranja\s*x|naranjax|naranja\)\(|naranja\s*digital)\b/i.test(clean)) return "Naranja X";
+  if (/\b(?:cuenta\s*dni|cuenta\s+comprobante|banco\s*provincia|bapro)\b/i.test(clean) || /código\s+de\s+referencia\s+\d{8}/i.test(clean)) return "Cuenta DNI";
+  if (/\b(?:personal\s*pay|personalpay)\b/i.test(clean)) return "Personal Pay";
+  if (/\b(?:banco\s*(?:de\s+la\s+)?naci[oó]n|bna\+?)\b/i.test(clean)) return "Banco Nación";
+  if (/\bgalicia\b/i.test(clean) && !/(?:destino|beneficiario|para)[^.]*galicia/i.test(clean)) return "Galicia";
+  if (/\b(?:bbva|franc[eé]s)\b/i.test(clean) && !/(?:destino|beneficiario|para)[^.]*bbva/i.test(clean)) return "BBVA";
+  if (/\bbrubank\b/i.test(clean)) return "Brubank";
+  if (/\bual[aá]\b/i.test(clean)) return "Ualá";
+  if (/\b(?:macro\s*bma|banco\s*macro|macro\s*online)\b/i.test(clean)) return "Banco Macro";
+  if (/\bpatagonia\b/i.test(clean)) return "Banco Patagonia";
+  if (/\b(?:banco\s*ciudad)\b/i.test(clean)) return "Banco Ciudad";
+  if (/\bcomafi\b/i.test(clean)) return "Banco Comafi";
+  if (/\bsupervielle\b/i.test(clean)) return "Supervielle";
+
+  // 2. Detección por CBU / CVU de origen
+  if (/\b00000031\d{14}\b/.test(clean)) return "Mercado Pago";
+  if (/\b453\d{19}\b/.test(clean)) return "Naranja X";
+  if (/\b00000062\d{14}\b/.test(clean)) return "Personal Pay";
+  if (/\b00000079\d{14}\b/.test(clean)) return "Ualá";
+
+  // 3. Santander SOLO si es el emisor y no simplemente el destino donde Perla Negra cobra
+  if (/\bonline\s+banking\s+personas\b/i.test(clean) || /\bcuenta\s+d[eé]bito\b/i.test(clean) || /\bimporte\s+debitado\b/i.test(clean)) {
+    return "Santander";
+  }
+
+  const sinDestino = clean.replace(/(?:beneficiario|para|destino|banco\s+de\s+destino|banco\s+destino)[^.]*(?:santander|perla\s*negra)/gi, '');
+  if (/\bsantander\b/i.test(sinDestino)) {
+    return "Santander";
+  }
+
+  return "No identificado";
+}
+
+function normalizeAmount(str) {
+  if (!str) return null;
+  const cleaned = String(str).replace(/[^\d.,]/g, '');
+  let m = cleaned.match(/^(\d{1,3}(?:\.\d{3})+),(\d{2})$/);
+  if (m) {
+    const ent = m[1].replace(/\./g, '');
+    return m[2] === '00' ? parseInt(ent, 10) : parseFloat(ent + '.' + m[2]);
+  }
+  m = cleaned.match(/^(\d{1,3}(?:\.\d{3})+)$/);
+  if (m) return parseInt(m[1].replace(/\./g, ''), 10);
+  m = cleaned.match(/^(\d+),(\d{2})$/);
+  if (m) return m[2] === '00' ? parseInt(m[1], 10) : parseFloat(m[1] + '.' + m[2]);
+  m = cleaned.match(/^(\d+)\.(\d{2})$/);
+  if (m) return m[2] === '00' ? parseInt(m[1], 10) : parseFloat(m[1] + '.' + m[2]);
+  m = cleaned.match(/^\d+$/);
+  if (m) return parseInt(cleaned, 10);
+  return null;
+}
+
+function extractAmountFromText(text) {
+  if (!text) return null;
+  const clean = text.replace(/\s+/g, ' ');
+  let m = clean.match(/(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*[\$sS]?\s*([\d.,]+)/i);
+  if (m) {
+    const n = normalizeAmount(m[1]);
+    if (n && n > 0) return n;
+  }
+  m = clean.match(/[\$s]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)\s*(?:motivo|para|origen|\.)/i);
+  if (m) {
+    const n = normalizeAmount(m[1]);
+    if (n && n > 0) return n;
+  }
+  m = clean.match(/[\$s]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)/i);
+  if (m) {
+    const n = normalizeAmount(m[1]);
+    if (n && n > 0) return n;
+  }
+  m = clean.match(/[\$s]\s*(\d{4,}(?:,[\d]{2})?)/i);
+  if (m) {
+    const n = normalizeAmount(m[1]);
+    if (n && n > 0) return n;
+  }
+  return null;
+}
+
+async function extractDestinatarioFromPdf(pdfPath) {
+  try {
+    const { PDFParse } = require('pdf-parse');
+    const buf = fs.readFileSync(pdfPath);
+    const parser = new PDFParse(new Uint8Array(buf));
+    const result = await parser.getText();
+    const text = result.text || '';
+    return {
+      destinatario: parseDestinatarioFromText(text),
+      origen: detectBancoOrigenFromText(text),
+      montoDoc: extractAmountFromText(text)
+    };
+  } catch (err) {
+    return {
+      destinatario: "No legible",
+      origen: "No identificado",
+      montoDoc: null
+    };
+  }
+}
+
+function runOcrOnFolder(folderPath) {
+  try {
+    const scriptPath = path.join(BASE_DIR, 'extract_ocr.ps1');
+    if (!fs.existsSync(scriptPath)) return {};
+    const out = execFileSync('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-FolderPath', folderPath], {
+      encoding: 'utf-8',
+      timeout: 30000
+    });
+    const jsonStart = out.indexOf('{');
+    if (jsonStart !== -1) {
+      return JSON.parse(out.slice(jsonStart));
+    }
+  } catch (err) {
+    console.warn('Advertencia en OCR local:', err.message);
+  }
+  return {};
+}
+
+function getConfig() {
+  const defaultConfig = {
+    driveBasePath: 'C:\\PerlaNegra\\02 PAGOS'
+  };
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      return Object.assign(defaultConfig, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')));
+    }
+  } catch (e) {
+    console.error("Error leyendo config:", e);
+  }
+  return defaultConfig;
+}
+
+function saveConfig(cfg) {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+  } catch (e) {
+    console.error("Error guardando config:", e);
+  }
+}
+
+function getRegistro() {
+  try {
+    if (fs.existsSync(REGISTRO_FILE)) {
+      return JSON.parse(fs.readFileSync(REGISTRO_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error("Error leyendo registro_subidos.json:", e);
+  }
+  return {};
+}
+
+function saveRegistro(registro) {
+  try {
+    fs.writeFileSync(REGISTRO_FILE, JSON.stringify(registro, null, 2), 'utf-8');
+  } catch (e) {
+    console.error("Error guardando registro_subidos.json:", e);
+  }
+}
+
+function listFilesRecursively(dir, extensions = ['.jpg', '.jpeg', '.png', '.pdf']) {
+  let results = [];
+  try {
+    if (!fs.existsSync(dir)) return results;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results = results.concat(listFilesRecursively(fullPath, extensions));
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (extensions.includes(ext)) {
+          try {
+            const stat = fs.statSync(fullPath);
+            results.push({
+              name: entry.name,
+              fullPath: fullPath,
+              size: stat.size,
+              mtime: stat.mtime
+            });
+          } catch (e) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`Error leyendo ${dir}:`, err);
+  }
+  return results;
+}
+
+function findCampaignFolder(basePath, campanaCode) {
+  if (!fs.existsSync(basePath)) return null;
+  const normalizedCode = campanaCode.toUpperCase().trim();
+  try {
+    const entries = fs.readdirSync(basePath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const upper = entry.name.toUpperCase();
+        if (upper.startsWith(normalizedCode) || upper.includes(normalizedCode)) {
+          return path.join(basePath, entry.name);
+        }
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+function parseReceiptFilename(filename, campana) {
+  const ext = path.extname(filename);
+  const baseName = path.basename(filename, ext).trim();
+  const regex = /^([a-zA-Z]\d{4})\s+([\d.]+)\s+(.+)$/i;
+  const m = baseName.match(regex);
+  if (m) {
+    return {
+      campana: m[1].toUpperCase(),
+      monto: m[2],
+      clienteOReferencia: m[3].trim()
+    };
+  }
+  return {
+    campana: campana || "",
+    monto: "",
+    clienteOReferencia: baseName
+  };
+}
+
+function getJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function handleApiRequest(req, res, pathname, parsedUrl) {
+  // Normalizar prefijo: acepta tanto /api/... como /comprobantes_para_web/api/...
+  let apiPath = pathname;
+  if (apiPath.startsWith('/comprobantes_para_web/api/')) {
+    apiPath = apiPath.replace('/comprobantes_para_web/api/', '/api/');
+  }
+
+  const sendJson = (statusCode, data) => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end(JSON.stringify(data));
+  };
+
+  // GET /api/config
+  if (apiPath === '/api/config' && req.method === 'GET') {
+    const cfg = getConfig();
+    const exists = fs.existsSync(cfg.driveBasePath);
+    sendJson(200, { ok: true, config: cfg, folderExists: exists });
+    return true;
+  }
+
+  // POST /api/config
+  if (apiPath === '/api/config' && req.method === 'POST') {
+    try {
+      const body = await getJsonBody(req);
+      if (body.driveBasePath) {
+        const cfg = getConfig();
+        cfg.driveBasePath = body.driveBasePath.trim();
+        saveConfig(cfg);
+        const exists = fs.existsSync(cfg.driveBasePath);
+        sendJson(200, { ok: true, config: cfg, folderExists: exists });
+        return true;
+      }
+      sendJson(400, { ok: false, error: 'driveBasePath requerido' });
+      return true;
+    } catch (e) {
+      sendJson(500, { ok: false, error: e.message });
+      return true;
+    }
+  }
+
+  // GET /api/campanas
+  if (apiPath === '/api/campanas' && req.method === 'GET') {
+    const cfg = getConfig();
+    if (!fs.existsSync(cfg.driveBasePath)) {
+      sendJson(200, { ok: false, error: `No se encuentra la carpeta base: ${cfg.driveBasePath}`, campanas: [] });
+      return true;
+    }
+
+    try {
+      const entries = fs.readdirSync(cfg.driveBasePath, { withFileTypes: true });
+      const campanas = [];
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const match = entry.name.match(/\b(C\d{4})\b/i);
+          if (match) {
+            const code = match[1].toUpperCase();
+            const fullPath = path.join(cfg.driveBasePath, entry.name);
+            campanas.push({
+              codigo: code,
+              carpeta: entry.name,
+              path: fullPath
+            });
+          }
+        }
+      }
+
+      campanas.sort((a, b) => b.codigo.localeCompare(a.codigo));
+      sendJson(200, { ok: true, campanas, basePath: cfg.driveBasePath });
+      return true;
+    } catch (err) {
+      sendJson(500, { ok: false, error: err.message });
+      return true;
+    }
+  }
+
+  // GET /api/escanear-campana
+  if (apiPath === '/api/escanear-campana' && req.method === 'GET') {
+    const campana = (parsedUrl.searchParams.get('campana') || '').toUpperCase().trim();
+    if (!campana || !/^C\d{4}$/.test(campana)) {
+      sendJson(400, { ok: false, error: 'Código de campaña inválido. Formato requerido: CnnAA (ej: C1026, C1326)' });
+      return true;
+    }
+
+    const cfg = getConfig();
+    const campaignFolder = findCampaignFolder(cfg.driveBasePath, campana);
+
+    if (!campaignFolder) {
+      sendJson(404, {
+        ok: false,
+        error: `No se encontró ninguna carpeta correspondiente a la campaña ${campana} en "${cfg.driveBasePath}".`
+      });
+      return true;
+    }
+
+    const files = listFilesRecursively(campaignFolder);
+    const registro = getRegistro();
+    const registroCampana = registro[campana] || { archivos: {} };
+    const destCache = getDestinatariosCache();
+
+    // Comprobar si hay archivos cuyo destinatario aún no esté en caché
+    const archivosSinCache = files.filter(f => !destCache[f.name]);
+    if (archivosSinCache.length > 0) {
+      // 1. Ejecutar OCR para imágenes si hay pendientes
+      const hayImagenesSinCache = archivosSinCache.some(f => {
+        const ext = path.extname(f.name).toLowerCase();
+        return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
+      });
+
+      if (hayImagenesSinCache) {
+        const ocrData = runOcrOnFolder(campaignFolder);
+        for (const [fname, item] of Object.entries(ocrData)) {
+          if (!destCache[fname] && item) {
+            destCache[fname] = {
+              destinatario: item.destinatario || 'Perla Negra Srl',
+              origen: item.origen || 'No identificado',
+              montoDoc: item.montoDoc !== undefined ? item.montoDoc : null
+            };
+          }
+        }
+      }
+
+      // 2. Procesar PDFs pendientes directamente en Node.js
+      for (const f of archivosSinCache) {
+        if (!destCache[f.name] && path.extname(f.name).toLowerCase() === '.pdf') {
+          try {
+            const destPdf = await extractDestinatarioFromPdf(f.fullPath);
+            destCache[f.name] = destPdf;
+          } catch (e) {
+            destCache[f.name] = { destinatario: "No legible", origen: "No identificado", montoDoc: null };
+          }
+        }
+      }
+
+      saveDestinatariosCache(destCache);
+    }
+
+    let totalSubidos = 0;
+    let totalPendientes = 0;
+
+    const listado = files.map(f => {
+      const relPath = path.relative(campaignFolder, f.fullPath).replace(/\\/g, '/');
+      const yaSubidoInfo = registroCampana.archivos[f.name];
+      const yaSubido = Boolean(yaSubidoInfo);
+
+      if (yaSubido) totalSubidos++;
+      else totalPendientes++;
+
+      const parsed = parseReceiptFilename(f.name, campana);
+      const cached = destCache[f.name];
+      let destinatario = 'Empresa';
+      let origen = 'No identificado';
+      let montoDoc = null;
+
+      if (typeof cached === 'string') {
+        destinatario = (/perla\s*negra/i.test(cached) || cached === 'Empresa') ? 'Empresa' : cached;
+      } else if (cached && typeof cached === 'object') {
+        destinatario = cached.destinatario || 'Empresa';
+        if (/perla\s*negra/i.test(destinatario)) destinatario = 'Empresa';
+        origen = cached.origen || 'No identificado';
+        montoDoc = cached.montoDoc !== undefined ? cached.montoDoc : null;
+      }
+
+      return {
+        nombre: f.name,
+        rutaRelativa: relPath,
+        rutaCompleta: f.fullPath,
+        tamano: f.size,
+        fechaModificacion: f.mtime,
+        monto: parsed.monto,
+        montoDoc: montoDoc,
+        cliente: parsed.clienteOReferencia,
+        destinatario: destinatario,
+        origen: origen,
+        estado: yaSubido ? 'SUBIDO' : 'PENDIENTE',
+        subidoInfo: yaSubidoInfo || null
+      };
+    });
+
+    sendJson(200, {
+      ok: true,
+      campana,
+      carpeta: campaignFolder,
+      totalArchivos: files.length,
+      totalSubidos,
+      totalPendientes,
+      archivos: listado
+    });
+    return true;
+  }
+
+  // GET /api/comprobante-preview
+  if (apiPath === '/api/comprobante-preview' && req.method === 'GET') {
+    const campana = (parsedUrl.searchParams.get('campana') || '').toUpperCase().trim();
+    const archivo = parsedUrl.searchParams.get('archivo') || '';
+
+    if (!campana || !archivo) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Faltan parámetros (campana, archivo)');
+      return true;
+    }
+
+    const cfg = getConfig();
+    const campaignFolder = findCampaignFolder(cfg.driveBasePath, campana);
+    if (!campaignFolder) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Carpeta de campaña no encontrada');
+      return true;
+    }
+
+    const files = listFilesRecursively(campaignFolder);
+    const targetFile = files.find(f => f.name === archivo);
+    if (!targetFile || !fs.existsSync(targetFile.fullPath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Archivo no encontrado');
+      return true;
+    }
+
+    const ext = path.extname(targetFile.name).toLowerCase();
+    const contentType = ext === '.pdf' ? 'application/pdf' : (ext === '.png' ? 'image/png' : 'image/jpeg');
+
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=3600',
+      'Access-Control-Allow-Origin': '*'
+    });
+
+    const stream = fs.createReadStream(targetFile.fullPath);
+    stream.on('error', (err) => {
+      console.warn(`Error leyendo archivo ${targetFile.name}:`, err.message);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      }
+      res.end();
+    });
+    stream.pipe(res);
+    return true;
+  }
+
+  // POST /api/subir-comprobante
+  if (apiPath === '/api/subir-comprobante' && req.method === 'POST') {
+    try {
+      const body = await getJsonBody(req);
+      const { campana, rutaCompleta, nombreArchivo, dni } = body;
+
+      if (!campana || !rutaCompleta || !nombreArchivo) {
+        sendJson(400, { ok: false, error: 'Faltan parámetros requeridos (campana, rutaCompleta, nombreArchivo).' });
+        return true;
+      }
+
+      if (!fs.existsSync(rutaCompleta)) {
+        sendJson(404, { ok: false, error: `El archivo ya no existe en el disco: ${rutaCompleta}` });
+        return true;
+      }
+
+      const fileBuffer = fs.readFileSync(rutaCompleta);
+      const base64Data = fileBuffer.toString('base64');
+      const ext = path.extname(nombreArchivo).toLowerCase();
+      const mimeType = ext === '.pdf' ? 'application/pdf' : (ext === '.png' ? 'image/png' : 'image/jpeg');
+      const dniCliente = dni || "0";
+
+      const payload = {
+        dni: dniCliente,
+        archivo: base64Data,
+        nombreArchivo: nombreArchivo,
+        mimeType: mimeType,
+        campana: campana
+      };
+
+      let apiResponse = null;
+      let ok = false;
+      let errorMsg = null;
+
+      try {
+        const fetchRes = await fetch(API_URL_PERLA_NEGRA, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const resText = await fetchRes.text();
+        try {
+          apiResponse = JSON.parse(resText);
+          if (apiResponse && (apiResponse.ok === true || apiResponse.codigo === 'duplicado')) {
+            ok = true;
+          } else {
+            errorMsg = apiResponse && apiResponse.codigo ? apiResponse.codigo : resText;
+          }
+        } catch (e) {
+          apiResponse = { raw: resText };
+          ok = true;
+        }
+      } catch (fetchErr) {
+        console.error("Error al conectar con la API de Perla Negra:", fetchErr);
+        errorMsg = fetchErr.message;
+      }
+
+      if (ok) {
+        const registro = getRegistro();
+        if (!registro[campana]) {
+          registro[campana] = { archivos: {}, ultimaActualizacion: new Date().toISOString() };
+        }
+        registro[campana].archivos[nombreArchivo] = {
+          subidoEl: new Date().toISOString(),
+          tamano: fileBuffer.length,
+          resultado: apiResponse && apiResponse.codigo === 'duplicado' ? 'duplicado_existente' : 'subido_exitoso'
+        };
+        registro[campana].ultimaActualizacion = new Date().toISOString();
+        saveRegistro(registro);
+      }
+
+      sendJson(200, { ok, nombreArchivo, error: errorMsg, apiResponse });
+      return true;
+
+    } catch (err) {
+      sendJson(500, { ok: false, error: err.message });
+      return true;
+    }
+  }
+
+  // GET /api/generar-excel
+  if (apiPath === '/api/generar-excel' && req.method === 'GET') {
+    const campana = (parsedUrl.searchParams.get('campana') || '').toUpperCase().trim();
+    if (!campana || !/^C\d{4}$/.test(campana)) {
+      sendJson(400, { ok: false, error: 'Código de campaña inválido (ej: C1026).' });
+      return true;
+    }
+    try {
+      const { generarExcelCampana } = require('./generar_excel');
+      const resultado = await generarExcelCampana(campana);
+      sendJson(200, {
+        ok: true,
+        campana,
+        archivo: path.basename(resultado.outputPath),
+        totalProcesados: resultado.totalProcesados,
+        ruta: resultado.outputPath
+      });
+      return true;
+    } catch (e) {
+      sendJson(500, { ok: false, error: e.message });
+      return true;
+    }
+  }
+
+  // GET /api/descargar-excel
+  if (apiPath === '/api/descargar-excel' && req.method === 'GET') {
+    const campana = (parsedUrl.searchParams.get('campana') || '').toUpperCase().trim();
+    const fileName = `comprobantes_${campana.toLowerCase()}.xlsx`;
+    const filePath = path.join(BASE_DIR, 'Excels', fileName);
+
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`El Excel de la campaña ${campana} no existe. Genérelo primero.`);
+      return true;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+      'Access-Control-Allow-Origin': '*'
+    });
+    fs.createReadStream(filePath).pipe(res);
+    return true;
+  }
+
+  // GET /api/registro
+  if (apiPath === '/api/registro' && req.method === 'GET') {
+    const campana = (parsedUrl.searchParams.get('campana') || '').toUpperCase().trim();
+    const registro = getRegistro();
+    if (campana) {
+      sendJson(200, { ok: true, campana, registro: registro[campana] || { archivos: {} } });
+      return true;
+    }
+    sendJson(200, { ok: true, registro });
+    return true;
+  }
+
+  return false;
+}
+
+module.exports = {
+  handleApiRequest
+};
