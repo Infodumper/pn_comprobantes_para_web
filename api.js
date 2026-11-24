@@ -201,17 +201,53 @@ function runOcrOnFolder(folderPath) {
   return {};
 }
 
+function readEnvFile() {
+  const envPath = path.join(BASE_DIR, '.env');
+  const envVars = {};
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx !== -1) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          let val = trimmed.slice(eqIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          envVars[key] = val;
+        }
+      }
+    } catch (e) {
+      console.error("Error leyendo .env:", e);
+    }
+  }
+  return envVars;
+}
+
 function getConfig() {
+  const envVars = readEnvFile();
   const defaultConfig = {
-    driveBasePath: 'C:\\PerlaNegra\\02 PAGOS'
+    driveBasePath: envVars.DRIVE_BASE_PATH || 'C:\\PerlaNegra\\02 PAGOS',
+    dniUsuario: envVars.DNI_USUARIO || envVars.DNI_SUBIDA || '',
+    nombreUsuario: envVars.NOMBRE_USUARIO || envVars.USUARIO_SUBIDA || 'Paola Estévez'
   };
   try {
     if (fs.existsSync(CONFIG_FILE)) {
-      return Object.assign(defaultConfig, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')));
+      const jsonCfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+      Object.assign(defaultConfig, jsonCfg);
     }
   } catch (e) {
     console.error("Error leyendo config:", e);
   }
+  // .env tiene prioridad sobre config.json
+  if (envVars.DNI_USUARIO !== undefined) defaultConfig.dniUsuario = String(envVars.DNI_USUARIO).trim();
+  if (envVars.NOMBRE_USUARIO) defaultConfig.nombreUsuario = String(envVars.NOMBRE_USUARIO).trim();
+  if (envVars.DRIVE_BASE_PATH) defaultConfig.driveBasePath = String(envVars.DRIVE_BASE_PATH).trim();
+
   return defaultConfig;
 }
 
@@ -584,11 +620,23 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
         return true;
       }
 
+      const cfg = getConfig();
+      const dniCliente = String(dni || cfg.dniUsuario || "").replace(/[\s.\-_/\\,]/g, "").trim();
+
+      if (!dniCliente || dniCliente === "0") {
+        sendJson(400, {
+          ok: false,
+          nombreArchivo,
+          error: `Falta configurar DNI_USUARIO en el archivo .env para el usuario ${cfg.nombreUsuario || 'Paola Estévez'}.`,
+          codigo: 'dni_requerido'
+        });
+        return true;
+      }
+
       const fileBuffer = fs.readFileSync(rutaCompleta);
       const base64Data = fileBuffer.toString('base64');
       const ext = path.extname(nombreArchivo).toLowerCase();
       const mimeType = ext === '.pdf' ? 'application/pdf' : (ext === '.png' ? 'image/png' : 'image/jpeg');
-      const dniCliente = dni || "0";
 
       const payload = {
         dni: dniCliente,
@@ -614,7 +662,16 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
           if (apiResponse && (apiResponse.ok === true || apiResponse.codigo === 'duplicado')) {
             ok = true;
           } else {
-            errorMsg = apiResponse && apiResponse.codigo ? apiResponse.codigo : resText;
+            const cod = apiResponse && apiResponse.codigo ? apiResponse.codigo : '';
+            if (cod === 'dni_invalido') {
+              errorMsg = `El DNI configurado en .env ("${dniCliente}") no es un DNI válido.`;
+            } else if (cod === 'no_encontrado') {
+              errorMsg = `El DNI configurado en .env ("${dniCliente}" - ${cfg.nombreUsuario}) no figura en el padrón de la web.`;
+            } else if (cod) {
+              errorMsg = cod;
+            } else {
+              errorMsg = resText;
+            }
           }
         } catch (e) {
           apiResponse = { raw: resText };
@@ -656,7 +713,9 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
       return true;
     }
     try {
-      const { generarExcelCampana } = require('./generar_excel');
+      const modPath = path.join(__dirname, 'generar_excel.js');
+      delete require.cache[require.resolve(modPath)];
+      const { generarExcelCampana } = require(modPath);
       const resultado = await generarExcelCampana(campana);
       sendJson(200, {
         ok: true,

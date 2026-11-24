@@ -8,18 +8,53 @@ const CONFIG_FILE = path.join(BASE_WEB_DIR, 'config.json');
 const REGISTRO_FILE = path.join(BASE_WEB_DIR, 'registro_subidos.json');
 const API_URL_PERLA_NEGRA = "https://script.google.com/macros/s/AKfycbxMpLnqYvBR7A9OyliThTVm0VclyNIgRVflD9l3cM_2ry34971Z4lk5oJFT6Uw3S6ln/exec";
 
-// Cargar configuración de ruta base de Drive
+function readEnvFile() {
+  const envPath = path.join(BASE_WEB_DIR, '.env');
+  const envVars = {};
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx !== -1) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          let val = trimmed.slice(eqIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          envVars[key] = val;
+        }
+      }
+    } catch (e) {
+      console.error("Error leyendo .env:", e);
+    }
+  }
+  return envVars;
+}
+
+// Cargar configuración de ruta base de Drive y usuario
 function getConfig() {
+  const envVars = readEnvFile();
   const defaultConfig = {
-    driveBasePath: 'C:\\PerlaNegra\\02 PAGOS'
+    driveBasePath: envVars.DRIVE_BASE_PATH || 'C:\\PerlaNegra\\02 PAGOS',
+    dniUsuario: envVars.DNI_USUARIO || envVars.DNI_SUBIDA || '',
+    nombreUsuario: envVars.NOMBRE_USUARIO || envVars.USUARIO_SUBIDA || 'Paola Estévez'
   };
   try {
     if (fs.existsSync(CONFIG_FILE)) {
-      return Object.assign(defaultConfig, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')));
+      const jsonCfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+      Object.assign(defaultConfig, jsonCfg);
     }
   } catch (e) {
     console.error("Error leyendo config:", e);
   }
+  if (envVars.DNI_USUARIO !== undefined) defaultConfig.dniUsuario = String(envVars.DNI_USUARIO).trim();
+  if (envVars.NOMBRE_USUARIO) defaultConfig.nombreUsuario = String(envVars.NOMBRE_USUARIO).trim();
+  if (envVars.DRIVE_BASE_PATH) defaultConfig.driveBasePath = String(envVars.DRIVE_BASE_PATH).trim();
+
   return defaultConfig;
 }
 
@@ -356,14 +391,23 @@ const server = http.createServer(async (req, res) => {
         return sendJson(404, { ok: false, error: `El archivo ya no existe en el disco: ${rutaCompleta}` });
       }
 
+      const cfg = getConfig();
+      const dniCliente = String(dni || cfg.dniUsuario || "").replace(/[\s.\-_/\\,]/g, "").trim();
+
+      if (!dniCliente || dniCliente === "0") {
+        return sendJson(400, {
+          ok: false,
+          nombreArchivo,
+          error: `Falta configurar DNI_USUARIO en el archivo .env para el usuario ${cfg.nombreUsuario || 'Paola Estévez'}.`,
+          codigo: 'dni_requerido'
+        });
+      }
+
       // Leer archivo y convertir a Base64
       const fileBuffer = fs.readFileSync(rutaCompleta);
       const base64Data = fileBuffer.toString('base64');
       const ext = path.extname(nombreArchivo).toLowerCase();
       const mimeType = ext === '.pdf' ? 'application/pdf' : (ext === '.png' ? 'image/png' : 'image/jpeg');
-
-      // Si no viene DNI especificado, intentar extraer o enviar identificado
-      const dniCliente = dni || "0"; 
 
       // Preparar payload para la API de Google Apps Script
       const payload = {
@@ -391,7 +435,16 @@ const server = http.createServer(async (req, res) => {
           if (apiResponse && (apiResponse.ok === true || apiResponse.codigo === 'duplicado')) {
             ok = true;
           } else {
-            errorMsg = apiResponse && apiResponse.codigo ? apiResponse.codigo : resText;
+            const cod = apiResponse && apiResponse.codigo ? apiResponse.codigo : '';
+            if (cod === 'dni_invalido') {
+              errorMsg = `El DNI configurado en .env ("${dniCliente}") no es un DNI válido.`;
+            } else if (cod === 'no_encontrado') {
+              errorMsg = `El DNI configurado en .env ("${dniCliente}" - ${cfg.nombreUsuario}) no figura en el padrón de la web.`;
+            } else if (cod) {
+              errorMsg = cod;
+            } else {
+              errorMsg = resText;
+            }
           }
         } catch (e) {
           apiResponse = { raw: resText };

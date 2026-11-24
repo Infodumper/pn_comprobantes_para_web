@@ -50,6 +50,15 @@
         </button>
       </nav>
 
+      <!-- Usuario Activo para Subida -->
+      <div class="header__user-badge" id="header-user-badge" title="Usuario responsable para la subida de comprobantes">
+        <span class="user-avatar-icon">👤</span>
+        <div class="header__user-text">
+          <span class="header__user-name" id="nav-user-nombre">Paola Estévez</span>
+          <span class="header__user-dni" id="nav-user-dni"><strong id="nav-user-dni-val">DNI: Pendiente</strong></span>
+        </div>
+      </div>
+
       <!-- Estado de conexión API -->
       <div class="header__status" id="api-status-badge" title="Conexión con Apps Script Perla Negra">
         <span class="status-dot"></span>
@@ -257,6 +266,25 @@
           </div>
         </div>
 
+        <!-- Tarjeta de Usuario Responsable de Subida -->
+        <div class="upload-user-banner" id="banner-usuario-subida">
+          <div class="upload-user-banner__left">
+            <div class="upload-user-banner__icon" aria-hidden="true">👤</div>
+            <div class="upload-user-banner__details">
+              <span class="upload-user-banner__label">USUARIO SELECCIONADO PARA SUBIR A LA WEB</span>
+              <div class="upload-user-banner__title-row">
+                <h3 class="upload-user-banner__name" id="user-subida-nombre">Paola Estévez</h3>
+                <span class="badge badge--warning" id="user-subida-dni-badge">
+                  <span id="user-subida-dni-text">DNI: Pendiente en .env</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="upload-user-banner__hint">
+            <span class="upload-user-banner__hint-text" id="user-subida-hint">Este DNI se utiliza automáticamente para identificar la subida de los comprobantes.</span>
+          </div>
+        </div>
+
         <!-- Caja de Selección de Campaña -->
         <div class="search-box">
           <div class="search-box__input-wrap">
@@ -315,6 +343,9 @@
               <span class="client-info__label">Campaña Escaneada</span>
               <h3 class="client-info__name" id="resumen-campana-codigo">C1026</h3>
               <p class="client-info__dni" id="resumen-campana-carpeta">Carpeta: —</p>
+              <p class="client-info__dni" style="margin-top: 0.2rem; color: var(--azul-kaizuna); font-size: 0.8rem;">
+                Usuario: <strong id="resumen-usuario-nombre">Paola Estévez</strong> (<span id="resumen-usuario-dni">DNI: —</span>)
+              </p>
             </div>
           </div>
 

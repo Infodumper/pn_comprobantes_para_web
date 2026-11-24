@@ -200,6 +200,117 @@ body {
   border: 1px solid rgba(90, 130, 89, 0.2);
 }
 
+/* Header User Badge */
+.header__user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  transition: var(--transition);
+}
+
+.user-avatar-icon {
+  font-size: 0.95rem;
+}
+
+.header__user-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.header__user-name {
+  font-weight: 600;
+  color: var(--azul-kaizuna);
+}
+
+.header__user-dni {
+  color: var(--gris-medio);
+  font-size: 0.74rem;
+}
+
+/* Upload User Banner (en la vista de Cargar Comprobantes) */
+.upload-user-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, rgba(20, 88, 144, 0.05) 0%, rgba(90, 130, 89, 0.06) 100%);
+  border: 1px solid rgba(20, 88, 144, 0.15);
+  border-left: 4px solid var(--azul-kaizuna);
+  border-radius: var(--radius-md);
+}
+
+.upload-user-banner__left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.upload-user-banner__icon {
+  width: 38px;
+  height: 38px;
+  background-color: var(--blanco);
+  border: 1px solid rgba(20, 88, 144, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.04);
+}
+
+.upload-user-banner__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.upload-user-banner__label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--azul-kaizuna);
+  text-transform: uppercase;
+}
+
+.upload-user-banner__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.upload-user-banner__name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--oscuro);
+  margin: 0;
+}
+
+.upload-user-banner__hint {
+  font-size: 0.78rem;
+  color: var(--gris-medio);
+  text-align: right;
+  max-width: 320px;
+}
+
+@media (max-width: 768px) {
+  .upload-user-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .upload-user-banner__hint {
+    text-align: left;
+  }
+}
+
 .status-dot {
   width: 7px;
   height: 7px;

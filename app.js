@@ -37,7 +37,13 @@ const state = {
     direccion: "asc" // "asc" | "desc"
   },
   isScanning: false,
-  isUploadingBatch: false
+  isUploadingBatch: false,
+
+  // Usuario configurado para la subida de comprobantes (.env)
+  usuarioSubida: {
+    nombre: "Paola Estévez",
+    dni: ""
+  }
 };
 
 /* Elementos del DOM */
@@ -120,7 +126,16 @@ const dom = {
   btnSortMonto: document.getElementById("btn-sort-monto"),
   sortIndNombre: document.getElementById("sort-ind-nombre"),
   sortIndCliente: document.getElementById("sort-ind-cliente"),
-  sortIndMonto: document.getElementById("sort-ind-monto")
+  sortIndMonto: document.getElementById("sort-ind-monto"),
+
+  // Usuario configurado para subidas (.env)
+  navUserNombre: document.getElementById("nav-user-nombre"),
+  navUserDniVal: document.getElementById("nav-user-dni-val"),
+  userSubidaNombre: document.getElementById("user-subida-nombre"),
+  userSubidaDniBadge: document.getElementById("user-subida-dni-badge"),
+  userSubidaDniText: document.getElementById("user-subida-dni-text"),
+  resumenUsuarioNombre: document.getElementById("resumen-usuario-nombre"),
+  resumenUsuarioDni: document.getElementById("resumen-usuario-dni")
 };
 
 /* -------------------------------------------------------------
@@ -485,8 +500,46 @@ function descargarBlob(blob, nombreArchivo) {
 /* -------------------------------------------------------------
    4. MÓDULO DE CARGA AUTOMÁTICA POR CAMPAÑA (GOOGLE DRIVE)
    ------------------------------------------------------------- */
+async function cargarConfiguracionUsuario() {
+  try {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    if (data && data.ok && data.config) {
+      if (data.config.nombreUsuario) state.usuarioSubida.nombre = data.config.nombreUsuario;
+      state.usuarioSubida.dni = data.config.dniUsuario || "";
+    }
+  } catch (e) {
+    console.warn("No se pudo cargar la configuración de usuario desde el backend:", e);
+  }
+  renderUsuarioSubida();
+}
+
+function renderUsuarioSubida() {
+  const nombre = state.usuarioSubida.nombre || "Paola Estévez";
+  const dni = state.usuarioSubida.dni || "";
+
+  if (dom.navUserNombre) dom.navUserNombre.textContent = nombre;
+  if (dom.navUserDniVal) {
+    dom.navUserDniVal.textContent = dni ? `DNI: ${dni}` : "DNI: No configurado";
+  }
+
+  if (dom.userSubidaNombre) dom.userSubidaNombre.textContent = nombre;
+  if (dom.userSubidaDniText) {
+    dom.userSubidaDniText.textContent = dni ? `DNI: ${dni}` : "DNI: Pendiente en .env";
+  }
+  if (dom.userSubidaDniBadge) {
+    dom.userSubidaDniBadge.className = dni ? "badge badge--success" : "badge badge--warning";
+  }
+
+  if (dom.resumenUsuarioNombre) dom.resumenUsuarioNombre.textContent = nombre;
+  if (dom.resumenUsuarioDni) {
+    dom.resumenUsuarioDni.textContent = dni ? `DNI: ${dni}` : "DNI: No configurado en .env";
+  }
+}
+
 function setupCampanaModule() {
-  // Cargar campañas disponibles en Google Drive al inicio
+  // Cargar usuario configurado en .env y campañas disponibles en Google Drive al inicio
+  cargarConfiguracionUsuario();
   cargarCampanasDisponibles();
 
   // Escanear al hacer clic en el botón
@@ -915,6 +968,9 @@ function renderResumenCampana(data) {
   dom.resumenCampanaCodigo.textContent = data.campana;
   dom.resumenCampanaCarpeta.textContent = `Carpeta: ${data.carpeta}`;
 
+  if (dom.resumenUsuarioNombre) dom.resumenUsuarioNombre.textContent = state.usuarioSubida.nombre || "Paola Estévez";
+  if (dom.resumenUsuarioDni) dom.resumenUsuarioDni.textContent = state.usuarioSubida.dni ? `DNI: ${state.usuarioSubida.dni}` : "DNI: No configurado en .env";
+
   dom.statCampanaTotal.textContent = data.totalArchivos;
   dom.statCampanaSubidos.textContent = data.totalSubidos;
   dom.statCampanaFaltantes.textContent = data.totalPendientes;
@@ -1086,6 +1142,12 @@ async function subirComprobantesFaltantes(forzarTodo = false) {
     return;
   }
 
+  // Verificar si el DNI del usuario está configurado en .env
+  if (!state.usuarioSubida.dni) {
+    mostrarAlertaCampana(`⚠️ Falta configurar DNI_USUARIO en el archivo .env para el usuario ${state.usuarioSubida.nombre || "Paola Estévez"}. Editá el .env con el número de DNI y volvé a presionar Subir.`, "warning");
+    return;
+  }
+
   state.isUploadingBatch = true;
   if (dom.btnSubirTodo) {
     dom.btnSubirTodo.disabled = true;
@@ -1116,7 +1178,7 @@ async function subirComprobantesFaltantes(forzarTodo = false) {
       const porcentaje = Math.round(((procesados - 1) / total) * 100);
 
       // Actualizar barra de progreso
-      dom.progresoTitulo.textContent = `Subiendo comprobante ${procesados} de ${total} (Lote interno ${nroLote}/${totalLotes})...`;
+      dom.progresoTitulo.textContent = `Subiendo comprobante ${procesados} de ${total} (Lote interno ${nroLote}/${totalLotes}) • Usuario: ${state.usuarioSubida.nombre}...`;
       dom.progresoPorcentaje.textContent = `${porcentaje}%`;
       dom.barraProgresoEnvio.style.width = `${porcentaje}%`;
       dom.progresoArchivoActual.textContent = `Archivo actual: ${item.nombre}`;
@@ -1128,7 +1190,8 @@ async function subirComprobantesFaltantes(forzarTodo = false) {
           body: JSON.stringify({
             campana: state.campanaActual,
             rutaCompleta: item.rutaCompleta,
-            nombreArchivo: item.nombre
+            nombreArchivo: item.nombre,
+            dni: state.usuarioSubida.dni
           })
         });
 
@@ -1177,9 +1240,9 @@ async function subirComprobantesFaltantes(forzarTodo = false) {
   actualizarEstadoBotonSubir();
 
   if (fallidos === 0) {
-    mostrarAlertaCampana(`¡Éxito! Se subieron los ${exitosos} comprobantes correctamente.`, "success");
+    mostrarAlertaCampana(`¡Éxito! Se subieron los ${exitosos} comprobantes correctamente para ${state.usuarioSubida.nombre}.`, "success");
   } else {
-    mostrarAlertaCampana(`Subida finalizada con avisos: ${exitosos} exitosos, ${fallidos} con error.`, "warning");
+    mostrarAlertaCampana(`Subida finalizada con avisos: ${exitosos} exitosos, ${fallidos} con error. Verificá que el DNI (${state.usuarioSubida.dni || "no configurado"}) de ${state.usuarioSubida.nombre} figure habilitado en la web.`, "warning");
   }
 }
 
