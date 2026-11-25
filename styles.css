@@ -301,6 +301,40 @@ body {
   max-width: 320px;
 }
 
+.btn-toggle-dest {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #16A34A;
+  background: #F0FDF4;
+  color: #16A34A;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 0.35rem;
+  line-height: 1.2;
+}
+
+.btn-toggle-dest:hover {
+  background: #16A34A;
+  color: #FFFFFF;
+}
+
+.btn-toggle-dest--revert {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+  color: #94A3B8;
+  opacity: 0.7;
+}
+
+.btn-toggle-dest--revert:hover {
+  background: #E2E8F0;
+  color: #475569;
+  opacity: 1;
+}
+
 @media (max-width: 768px) {
   .upload-user-banner {
     flex-direction: column;
@@ -597,14 +631,117 @@ body {
 
 .dest-perla {
   color: var(--verde-suave);
+  font-weight: 700;
 }
 
 .dest-otro {
-  color: #D97706;
+  color: #DC2626 !important;
+  font-weight: 700 !important;
+  background-color: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .dest-desconocido {
-  color: var(--gris-medio);
+  color: #DC2626 !important;
+  font-weight: 700 !important;
+  background-color: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.dest-no-empresa {
+  color: #DC2626 !important;
+  font-weight: 700 !important;
+  background-color: #FEE2E2;
+  border: 1px solid #FCA5A5;
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.badge-no-empresa {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background-color: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #F87171;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.1);
+}
+
+.row--no-empresa {
+  background-color: #FFF5F5 !important;
+  border-left: 3px solid #EF4444;
+}
+
+.row--no-empresa:hover {
+  background-color: #FEE8E8 !important;
+}
+
+/* Filtro de Destino (PARA) */
+.dest-filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  margin-bottom: 1.15rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 1rem;
+  background: var(--blanco);
+  border: 1px solid var(--gris-suave);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+}
+
+.dest-filter-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--oscuro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.toggle-btn--empresa.is-active {
+  background-color: var(--verde-suave) !important;
+  border-color: var(--verde-suave) !important;
+  color: #FFFFFF !important;
+}
+
+.toggle-btn--no-empresa {
+  color: #DC2626 !important;
+  border-color: #FCA5A5 !important;
+}
+
+.toggle-btn--no-empresa:hover {
+  background-color: #FEE2E2 !important;
+}
+
+.toggle-btn--no-empresa.is-active {
+  background-color: #DC2626 !important;
+  border-color: #DC2626 !important;
+  color: #FFFFFF !important;
 }
 
 .destinatario-divider {
@@ -985,9 +1122,134 @@ body {
   flex-wrap: wrap;
 }
 
+.view-toolbar__filters {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 280px;
+}
+
 .view-toolbar__search {
   flex: 1;
-  max-width: 350px;
+  min-width: 200px;
+  max-width: 340px;
+}
+
+.view-toolbar__campana {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.filter-campana-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--azul-kaizuna);
+  white-space: nowrap;
+}
+
+.select-campana {
+  padding: 0.38rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gris-suave);
+  background-color: var(--blanco);
+  color: var(--azul-kaizuna);
+  cursor: pointer;
+  transition: var(--transition);
+  height: 34px;
+}
+
+.select-campana:focus {
+  border-color: var(--verde-suave);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.15);
+}
+
+.campana-pills-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-md);
+}
+
+.campana-pills-bar__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 0.25rem;
+}
+
+.campana-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.campana-pill:hover {
+  border-color: var(--verde-suave);
+  color: var(--verde-suave);
+  background: #F0FDF4;
+}
+
+.campana-pill.is-active {
+  background-color: var(--azul-kaizuna);
+  border-color: var(--azul-kaizuna);
+  color: #FFFFFF;
+  box-shadow: 0 2px 4px rgba(11, 37, 69, 0.2);
+}
+
+.campana-pill__count {
+  font-size: 0.72rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.campana-pill.is-active .campana-pill__count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+.badge--campana {
+  background-color: #E0F2FE;
+  color: #0369A1;
+  border: 1px solid #BAE6FD;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.4px;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.receipt-card__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .view-toolbar__toggle {
@@ -1708,6 +1970,40 @@ body {
 }
 
 /* 16. RESPONSIVE DESIGN */
+.btn-toggle-dest {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #16A34A;
+  background: #F0FDF4;
+  color: #16A34A;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 0.35rem;
+  line-height: 1.2;
+}
+
+.btn-toggle-dest:hover {
+  background: #16A34A;
+  color: #FFFFFF;
+}
+
+.btn-toggle-dest--revert {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+  color: #94A3B8;
+  opacity: 0.7;
+}
+
+.btn-toggle-dest--revert:hover {
+  background: #E2E8F0;
+  color: #475569;
+  opacity: 1;
+}
+
 @media (max-width: 768px) {
   .header__container {
     flex-direction: column;

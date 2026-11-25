@@ -13,6 +13,10 @@ $asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Ob
     $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
 } | Select-Object -First 1
 
+$asTaskAction = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction'
+} | Select-Object -First 1
+
 function Invoke-AsyncOp($asyncOp, $type) {
     $method = $asTaskGeneric.MakeGenericMethod($type)
     $task = $method.Invoke($null, @($asyncOp))
@@ -20,7 +24,13 @@ function Invoke-AsyncOp($asyncOp, $type) {
     return $task.Result
 }
 
+function Invoke-AsyncAction($asyncAction) {
+    $task = $asTaskAction.Invoke($null, @($asyncAction))
+    $task.Wait()
+}
+
 [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Pdf.PdfDocument, Windows.Data.Pdf, ContentType = WindowsRuntime] | Out-Null
 [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType = WindowsRuntime] | Out-Null
 [Windows.Media.Ocr.OcrEngine, Windows.Media.Ocr, ContentType = WindowsRuntime] | Out-Null
 
@@ -137,8 +147,8 @@ function Parse-Destinatario($text) {
     if (-not $text) { return "No legible" }
     $clean = $text -replace '\s+', ' '
 
-    # Si contiene cualquier variación de Perla Negra, se unifica como "Empresa"
-    if ($clean -match '(?i)\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b') {
+    # Si contiene cualquier variación de Perla Negra, CUIT o CBU, se unifica como "Empresa"
+    if ($clean -match '(?i)\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b' -or $clean -match '\b30-?70865775-?8\b' -or $clean -match '\b0720164220000001125540\b') {
         return "Empresa"
     }
 
@@ -177,36 +187,68 @@ function Parse-Destinatario($text) {
         if ($val.Length -gt 2 -and $val.Length -lt 55) { return $val }
     }
 
+    # 6. Regex para "Envío de dinero a ..."
+    if ($clean -match '(?i)env[ií]o\s+de\s+dinero\s+a[:\s]+(?<dest>[^\r\n,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\$|\d{5,}|$))') {
+        $val = ($Matches['dest'] -replace '(?i)^(?:apellido\s*y\s*nombre|titular|nombre)[:\s]*', '').Trim()
+        if ($val -match '(?i)\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b') { return "Empresa" }
+        if ($val.Length -gt 2 -and $val.Length -lt 55) { return $val }
+    }
+
     return "No identificado"
 }
 
 $results = @{}
-$extensions = @("*.jpg", "*.jpeg", "*.png")
+$extensions = @("*.jpg", "*.jpeg", "*.png", "*.pdf")
 
 $files = Get-ChildItem -Path $FolderPath -Include $extensions -Recurse -File -ErrorAction SilentlyContinue
 
 foreach ($file in $files) {
     try {
-        $fileOp = [Windows.Storage.StorageFile]::GetFileFromPathAsync($file.FullName)
-        $storageFile = Invoke-AsyncOp $fileOp ([Windows.Storage.StorageFile])
-        $streamOp = $storageFile.OpenAsync([Windows.Storage.FileAccessMode]::Read)
-        $stream = Invoke-AsyncOp $streamOp ([Windows.Storage.Streams.IRandomAccessStream])
-        $decoderOp = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)
-        $decoder = Invoke-AsyncOp $decoderOp ([Windows.Graphics.Imaging.BitmapDecoder])
-        $bitmapOp = $decoder.GetSoftwareBitmapAsync()
-        $bitmap = Invoke-AsyncOp $bitmapOp ([Windows.Graphics.Imaging.SoftwareBitmap])
-        $ocrOp = $engine.RecognizeAsync($bitmap)
-        $ocrResult = Invoke-AsyncOp $ocrOp ([Windows.Media.Ocr.OcrResult])
+        $ext = $file.Extension.ToLower()
+        $rawText = ""
 
-        $dest = Parse-Destinatario $ocrResult.Text
-        $origen = Detect-BancoOrigen $ocrResult.Text
-        $montoDoc = Extract-AmountFromText $ocrResult.Text
+        if ($ext -eq ".pdf") {
+            $fileOp = [Windows.Storage.StorageFile]::GetFileFromPathAsync($file.FullName)
+            $storageFile = Invoke-AsyncOp $fileOp ([Windows.Storage.StorageFile])
+            $docOp = [Windows.Data.Pdf.PdfDocument]::LoadFromFileAsync($storageFile)
+            $doc = Invoke-AsyncOp $docOp ([Windows.Data.Pdf.PdfDocument])
+            if ($doc.PageCount -gt 0) {
+                $page = $doc.GetPage(0)
+                $memStream = New-Object Windows.Storage.Streams.InMemoryRandomAccessStream
+                $renderOp = $page.RenderToStreamAsync($memStream)
+                Invoke-AsyncAction $renderOp
+
+                $decoderOp = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($memStream)
+                $decoder = Invoke-AsyncOp $decoderOp ([Windows.Graphics.Imaging.BitmapDecoder])
+                $bitmapOp = $decoder.GetSoftwareBitmapAsync()
+                $bitmap = Invoke-AsyncOp $bitmapOp ([Windows.Graphics.Imaging.SoftwareBitmap])
+                $ocrOp = $engine.RecognizeAsync($bitmap)
+                $ocrResult = Invoke-AsyncOp $ocrOp ([Windows.Media.Ocr.OcrResult])
+                $rawText = $ocrResult.Text
+            }
+        } else {
+            $fileOp = [Windows.Storage.StorageFile]::GetFileFromPathAsync($file.FullName)
+            $storageFile = Invoke-AsyncOp $fileOp ([Windows.Storage.StorageFile])
+            $streamOp = $storageFile.OpenAsync([Windows.Storage.FileAccessMode]::Read)
+            $stream = Invoke-AsyncOp $streamOp ([Windows.Storage.Streams.IRandomAccessStream])
+            $decoderOp = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)
+            $decoder = Invoke-AsyncOp $decoderOp ([Windows.Graphics.Imaging.BitmapDecoder])
+            $bitmapOp = $decoder.GetSoftwareBitmapAsync()
+            $bitmap = Invoke-AsyncOp $bitmapOp ([Windows.Graphics.Imaging.SoftwareBitmap])
+            $ocrOp = $engine.RecognizeAsync($bitmap)
+            $ocrResult = Invoke-AsyncOp $ocrOp ([Windows.Media.Ocr.OcrResult])
+            $rawText = $ocrResult.Text
+        }
+
+        $dest = Parse-Destinatario $rawText
+        $origen = Detect-BancoOrigen $rawText
+        $montoDoc = Extract-AmountFromText $rawText
 
         $results[$file.Name] = @{
             destinatario = $dest
             origen = $origen
             montoDoc = $montoDoc
-            rawText = $ocrResult.Text
+            rawText = $rawText
         }
     } catch {
         $results[$file.Name] = @{

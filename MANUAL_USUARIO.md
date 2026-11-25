@@ -41,15 +41,18 @@ Este módulo permite visualizar el listado completo de pagos y transferencias re
 
 ### 3.2 Visualización de Resultados
 Una vez realizada la consulta, el sistema muestra:
-* **Ficha del Cliente**: Nombre completo, DNI y cantidad total de comprobantes encontrados.
+* **Ficha del Cliente**: Nombre completo, DNI, cantidad total de comprobantes encontrados y métricas de monto total, cantidad de campañas y meses registrados.
+* **Filtro por Campaña**:
+  * **Selector Desplegable y Pastillas Rápidas**: Permite filtrar instantáneamente por campaña (`C1126`, `C1026`, etc.) o ver `Todas las Campañas`. Cada pastilla muestra la cantidad de comprobantes registrados para esa campaña.
+  * **Insignia de Campaña**: Cada fila en la vista Tabla y cada tarjeta en la vista Por Meses muestra la insignia azul con el código de su campaña (ej: `C1126`).
 * **Alternancia de Vistas**:
   * **Por Meses (Predeterminado)**: Organiza los comprobantes en tarjetas agrupadas cronológicamente por mes y año.
-  * **Tabla**: Muestra un listado tabular continuo con columnas de Fecha/Hora, Archivo, Tipo, Monto y botón de visualización.
+  * **Tabla**: Muestra un listado tabular continuo con columnas de Fecha/Hora, Campaña, Archivo, Tipo, Monto y botón de visualización.
 * **Ver Comprobante Original**: Cada tarjeta o fila cuenta con un botón para abrir el archivo original directamente en una pestaña nueva.
 
 ### 3.3 Exportación de Datos
-En la esquina superior de los resultados dispones de botones para exportar el listado:
-* **Descargar Excel (.xls)**: Genera una planilla compatible con Microsoft Excel con fecha, cliente, montos y enlaces a cada archivo.
+En la esquina superior de los resultados dispones de botones para exportar el listado (respetando los filtros activos de búsqueda y campaña):
+* **Descargar Excel (.xls)**: Genera una planilla compatible con Microsoft Excel con fecha, cliente, campaña, montos y enlaces a cada archivo.
 * **Descargar JSON**: Exporta la estructura completa de datos en formato JSON para integraciones externas.
 
 ---
@@ -82,7 +85,7 @@ La tabla presenta la información ordenada y estructurada en cinco columnas estr
 | Columna | Descripción y Ordenamiento |
 | :--- | :--- |
 | **Casilla (☑)** | Permite seleccionar qué comprobantes subir en el lote activo (hasta 10). Incluye casilla maestra en cabecera para marcar/desmarcar los comprobantes del lote. Los ya subidos aparecen desactivados en gris. |
-| **Nombre del Archivo ⇅** | Muestra el nombre físico del archivo y, debajo, una cápsula con la lectura inteligente: `DESDE: (Banco emisor) • PARA: Empresa`. **Haz clic en el encabezado para ordenar alfabéticamente (A-Z o Z-A)**. |
+| **Nombre del Archivo ⇅** | Muestra el nombre físico del archivo y, debajo, una cápsula con la lectura inteligente: `DESDE: (Banco emisor) • PARA: Empresa`. Si el destino **NO es Empresa**, se resalta en **ROJO** con la insignia `⚠️ No Empresa` y la fila se destaca para evitar su envío involuntario. **Haz clic en el encabezado para ordenar alfabéticamente (A-Z o Z-A)**. |
 | **Cliente ⇅ / Importe ⇅** | Nombre del cliente arriba y el importe en verde abajo. **Haz clic sobre "Cliente" para ordenar alfabéticamente por cliente, o sobre "Importe" para ordenar numéricamente por monto (menor a mayor o viceversa)**. |
 | **Imagen** | Miniatura del comprobante. Al posar el cursor sobre la imagen, esta **se amplía (zoom)** automáticamente para verificar los datos sin salir de la pantalla. Si es un PDF, muestra el botón para abrirlo. |
 | **Estado** | Indicador circular con letra inicial y color normado: **P** (Pendiente), **E** (Enviado), **F** (Fallido). |

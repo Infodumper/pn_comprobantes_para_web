@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,500;0,600;0,700;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20261124_05" />
 </head>
 <body>
   <!-- Header / Barra de Navegación -->
@@ -168,6 +168,10 @@
               <span class="stat-item__label">Total Registrado</span>
             </div>
             <div class="stat-item">
+              <span class="stat-item__value" id="stat-campanas-activas">0</span>
+              <span class="stat-item__label">Campañas</span>
+            </div>
+            <div class="stat-item">
               <span class="stat-item__value" id="stat-meses-activos">0</span>
               <span class="stat-item__label">Meses</span>
             </div>
@@ -197,8 +201,21 @@
 
         <!-- Filtro y selector de vista -->
         <div class="view-toolbar">
-          <div class="view-toolbar__search">
-            <input type="text" id="filtro-texto-resultados" placeholder="Filtrar por archivo, monto o fecha..." class="form-control form-control--sm" />
+          <div class="view-toolbar__filters">
+            <div class="view-toolbar__search">
+              <input type="text" id="filtro-texto-resultados" placeholder="Filtrar por archivo, monto o fecha..." class="form-control form-control--sm" />
+            </div>
+            <div class="view-toolbar__campana">
+              <label for="filtro-campana-resultados" class="filter-campana-label">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Campaña:</span>
+              </label>
+              <select id="filtro-campana-resultados" class="form-control form-control--sm select-campana">
+                <option value="todas">Todas las Campañas</option>
+              </select>
+            </div>
           </div>
           <div class="view-toolbar__toggle">
             <button type="button" class="toggle-btn is-active" id="btn-vista-agrupada" title="Vista por meses">
@@ -224,6 +241,9 @@
           </div>
         </div>
 
+        <!-- Barra de tabs rápidos por campaña -->
+        <div id="quick-campanas-bar" class="campana-pills-bar" hidden></div>
+
         <!-- Contenedores de visualización -->
         <div id="vista-meses-container" class="cards-months-container"></div>
         <div id="vista-tabla-container" class="table-container" hidden>
@@ -231,6 +251,7 @@
             <thead>
               <tr>
                 <th>Fecha y Hora</th>
+                <th>Campaña</th>
                 <th>Archivo</th>
                 <th>Tipo</th>
                 <th class="text-right">Monto</th>
@@ -409,7 +430,7 @@
         <!-- Filtros de la lista de archivos escaneados -->
         <div class="view-toolbar">
           <div class="view-toolbar__search">
-            <input type="text" id="filtro-archivos-campana" placeholder="Filtrar por nombre o cliente..." class="form-control form-control--sm" />
+            <input type="text" id="filtro-archivos-campana" placeholder="Filtrar por nombre, cliente o destino..." class="form-control form-control--sm" />
           </div>
           <div class="view-toolbar__toggle">
             <button type="button" class="toggle-btn is-active" id="filtro-tab-todos">
@@ -424,13 +445,45 @@
           </div>
         </div>
 
-        <!-- Barra de Organización por Lotes (interna, oculta en interfaz) -->
+        <!-- Barra de Filtros de Destinatario (PARA: Empresa vs No Empresa) -->
+        <div class="dest-filter-toolbar" id="dest-filter-toolbar">
+          <span class="dest-filter-label">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4"></path>
+            </svg>
+            Destino (PARA):
+          </span>
+          <div class="view-toolbar__toggle">
+            <button type="button" class="toggle-btn is-active" id="filtro-dest-todos" title="Mostrar comprobantes con cualquier destino">
+              <span>Todos los Destinos (<span id="count-dest-todos">0</span>)</span>
+            </button>
+            <button type="button" class="toggle-btn toggle-btn--empresa" id="filtro-dest-empresa" title="Mostrar solo comprobantes transferidos a Empresa (Perla Negra)">
+              <span>🏢 Solo Empresa (<span id="count-dest-empresa">0</span>)</span>
+            </button>
+            <button type="button" class="toggle-btn toggle-btn--no-empresa" id="filtro-dest-no-empresa" title="Mostrar comprobantes cuyo destino NO es Empresa (Terceros, Otros)">
+              <span>⚠️ No es Empresa (<span id="count-dest-no-empresa">0</span>)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Barra de Organización por Bloques de hasta 10 comprobantes -->
         <div class="lotes-bar" id="lotes-bar" style="display: none;">
           <div class="lotes-bar__left">
+            <span class="lotes-bar__title">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              Bloques (máx. 10):
+            </span>
             <div class="lotes-pills" id="lotes-pills-list"></div>
           </div>
           <div class="lotes-bar__right">
-            <button type="button" id="btn-seleccionar-10" style="display: none;"></button>
+            <button type="button" class="btn btn--outline btn--sm" id="btn-seleccionar-10" title="Seleccionar hasta 10 comprobantes pendientes">
+              Seleccionar 10 pendientes
+            </button>
           </div>
         </div>
 
@@ -478,6 +531,6 @@
     </div>
   </footer>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261124_05"></script>
 </body>
 </html>

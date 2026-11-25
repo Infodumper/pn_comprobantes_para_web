@@ -31,14 +31,18 @@ function parseDestinatarioFromText(text) {
   if (!text) return "No legible";
   const clean = text.replace(/\s+/g, ' ');
 
-  // Si contiene alguna variación de Perla Negra, se unifica como "Empresa"
-  if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(clean)) {
+  // Si contiene alguna variación de Perla Negra, CUIT o CBU, se unifica como "Empresa"
+  if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(clean) ||
+      /\b30-?70865775-?8\b/.test(clean) ||
+      /\b0720164220000001125540\b/.test(clean)) {
     return "Empresa";
   }
 
   const normalizarDest = (val) => {
     let limpio = val.replace(/^(?:apellido\s*y\s*nombre|titular|nombre)[:\s]*/i, '').trim();
-    if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(limpio)) {
+    if (/\b(?:perla\s*negra|ria\s*negra|negra\s*sr[li1]|perlanegra)\b/i.test(limpio) ||
+        /\b30-?70865775-?8\b/.test(limpio) ||
+        /\b0720164220000001125540\b/.test(limpio)) {
       return "Empresa";
     }
     return limpio;
@@ -74,6 +78,12 @@ function parseDestinatarioFromText(text) {
     return normalizarDest(m[1]);
   }
 
+  // 6. Regex para "Envío de dinero a ..."
+  m = clean.match(/env[ií]o\s+de\s+dinero\s+a[:\s]+([^,]+?)(?=\s+(?:banco|cbu|cvu|cuit|cuil|\$|\d{5,}|$))/i);
+  if (m && m[1].trim().length > 2 && m[1].trim().length < 55) {
+    return normalizarDest(m[1]);
+  }
+
   return "No identificado";
 }
 
@@ -90,7 +100,7 @@ function detectBancoOrigenFromText(text) {
   if (/\b(?:banco\s*(?:de\s+la\s+)?naci[oó]n|bna\+?)\b/i.test(clean)) return "Banco Nación";
   if (/\bgalicia\b/i.test(clean) && !/(?:destino|beneficiario|para)[^.]*galicia/i.test(clean)) return "Galicia";
   if (/\b(?:bbva|franc[eé]s)\b/i.test(clean) && !/(?:destino|beneficiario|para)[^.]*bbva/i.test(clean)) return "BBVA";
-  if (/\bbrubank\b/i.test(clean)) return "Brubank";
+  if (/\b(?:brubank|brubonk)\b/i.test(clean)) return "Brubank";
   if (/\bual[aá]\b/i.test(clean)) return "Ualá";
   if (/\b(?:macro\s*bma|banco\s*macro|macro\s*online)\b/i.test(clean)) return "Banco Macro";
   if (/\bpatagonia\b/i.test(clean)) return "Banco Patagonia";
@@ -385,6 +395,31 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
     return true;
   }
 
+  // GET /api/verificar-cliente
+  if (apiPath === '/api/verificar-cliente' && req.method === 'GET') {
+    const cfg = getConfig();
+    const dniRaw = parsedUrl.searchParams.get('dni') || cfg.dniUsuario || '';
+    const dni = String(dniRaw).replace(/[\s.\-_/\\,]/g, '').trim();
+    if (!dni) {
+      sendJson(400, { ok: false, error: 'DNI no especificado ni configurado en .env' });
+      return true;
+    }
+    try {
+      const fetchRes = await fetch(API_URL_PERLA_NEGRA, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ accion: 'buscarCliente', dni: dni })
+      });
+      const data = await fetchRes.json();
+      sendJson(200, data);
+      return true;
+    } catch (err) {
+      console.error('Error al verificar cliente en API:', err);
+      sendJson(500, { ok: false, error: err.message });
+      return true;
+    }
+  }
+
   // POST /api/config
   if (apiPath === '/api/config' && req.method === 'POST') {
     try {
@@ -465,36 +500,39 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
     const registroCampana = registro[campana] || { archivos: {} };
     const destCache = getDestinatariosCache();
 
-    // Comprobar si hay archivos cuyo destinatario aún no esté en caché
-    const archivosSinCache = files.filter(f => !destCache[f.name]);
-    if (archivosSinCache.length > 0) {
-      // 1. Ejecutar OCR para imágenes si hay pendientes
-      const hayImagenesSinCache = archivosSinCache.some(f => {
-        const ext = path.extname(f.name).toLowerCase();
-        return ext === '.jpg' || ext === '.jpeg' || ext === '.png';
-      });
+    // Comprobar si hay archivos cuyo destinatario aún no esté en caché o esté pendiente/no identificado
+    const archivosSinCache = files.filter(f => {
+      const c = destCache[f.name];
+      if (!c) return true;
+      if (typeof c === 'object' && (c.destinatario === 'No identificado' || c.destinatario === 'No legible' || c.destinatario === 'Pendiente de sincronizar')) {
+        return true;
+      }
+      return false;
+    });
 
-      if (hayImagenesSinCache) {
-        const ocrData = runOcrOnFolder(campaignFolder);
-        for (const [fname, item] of Object.entries(ocrData)) {
-          if (!destCache[fname] && item) {
-            destCache[fname] = {
-              destinatario: item.destinatario || 'Perla Negra Srl',
-              origen: item.origen || 'No identificado',
-              montoDoc: item.montoDoc !== undefined ? item.montoDoc : null
-            };
-          }
+    if (archivosSinCache.length > 0) {
+      // 1. Ejecutar OCR para imágenes y PDFs de la carpeta
+      const ocrData = runOcrOnFolder(campaignFolder);
+      for (const [fname, item] of Object.entries(ocrData)) {
+        if (item && item.destinatario && item.destinatario !== 'Pendiente de sincronizar') {
+          destCache[fname] = {
+            destinatario: item.destinatario || 'Empresa',
+            origen: item.origen || 'No identificado',
+            montoDoc: item.montoDoc !== undefined ? item.montoDoc : null
+          };
         }
       }
 
-      // 2. Procesar PDFs pendientes directamente en Node.js
+      // 2. Si todavía queda algún PDF sin resolver, intentar con pdf-parse
       for (const f of archivosSinCache) {
-        if (!destCache[f.name] && path.extname(f.name).toLowerCase() === '.pdf') {
+        if ((!destCache[f.name] || destCache[f.name].destinatario === 'No identificado') && path.extname(f.name).toLowerCase() === '.pdf') {
           try {
             const destPdf = await extractDestinatarioFromPdf(f.fullPath);
-            destCache[f.name] = destPdf;
+            if (destPdf && destPdf.destinatario && destPdf.destinatario !== 'No legible' && destPdf.destinatario !== 'No identificado') {
+              destCache[f.name] = destPdf;
+            }
           } catch (e) {
-            destCache[f.name] = { destinatario: "No legible", origen: "No identificado", montoDoc: null };
+            // Mantener valor existente
           }
         }
       }
@@ -667,6 +705,8 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
               errorMsg = `El DNI configurado en .env ("${dniCliente}") no es un DNI válido.`;
             } else if (cod === 'no_encontrado') {
               errorMsg = `El DNI configurado en .env ("${dniCliente}" - ${cfg.nombreUsuario}) no figura en el padrón de la web.`;
+            } else if (cod === 'limite') {
+              errorMsg = 'Demasiadas consultas en el servidor central. Esperá un momento e intentá de nuevo.';
             } else if (cod) {
               errorMsg = cod;
             } else {
@@ -696,9 +736,33 @@ async function handleApiRequest(req, res, pathname, parsedUrl) {
         saveRegistro(registro);
       }
 
-      sendJson(200, { ok, nombreArchivo, error: errorMsg, apiResponse });
+      sendJson(200, { ok, codigo: apiResponse && apiResponse.codigo ? apiResponse.codigo : null, nombreArchivo, error: errorMsg, apiResponse });
       return true;
 
+    } catch (err) {
+      sendJson(500, { ok: false, error: err.message });
+      return true;
+    }
+  }
+
+  // POST /api/actualizar-destinatario
+  if (apiPath === '/api/actualizar-destinatario' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      const { archivo, destinatario } = body;
+      if (!archivo || !destinatario) {
+        sendJson(400, { ok: false, error: 'Faltan parámetros requeridos (archivo, destinatario).' });
+        return true;
+      }
+      const cache = getDestinatariosCache();
+      const prev = cache[archivo] || {};
+      cache[archivo] = {
+        ...prev,
+        destinatario: destinatario === 'Empresa' ? 'Empresa' : destinatario
+      };
+      saveDestinatariosCache(cache);
+      sendJson(200, { ok: true, archivo, destinatario: cache[archivo].destinatario });
+      return true;
     } catch (err) {
       sendJson(500, { ok: false, error: err.message });
       return true;
