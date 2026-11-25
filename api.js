@@ -149,26 +149,42 @@ function normalizeAmount(str) {
 function extractAmountFromText(text) {
   if (!text) return null;
   const clean = text.replace(/\s+/g, ' ');
-  let m = clean.match(/(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*[\$sS]?\s*([\d.,]+)/i);
+
+  // 1. Patrones explícitos con palabras clave y signo $ o s/S
+  let m = clean.match(/(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*[\$sS]\s*([\d.,]+(?:\s+\d{2})?)/i);
+  if (m) {
+    const n = normalizeAmount(m[1].replace(/\s+/g, ''));
+    if (n && n > 0) return n;
+  }
+
+  // 1b. Patrones explícitos sin signo $, pero que NO sean una fecha (evita capturar "23" de "23/NOV/2026" o "23/11")
+  m = clean.match(/(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?|\d{3,}(?:,[\d]{2})?)(?!\s*[\/-]|\s*(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic))/i);
   if (m) {
     const n = normalizeAmount(m[1]);
     if (n && n > 0) return n;
   }
-  m = clean.match(/[\$s]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)\s*(?:motivo|para|origen|\.)/i);
+
+  // 2. Mercado Pago: "$ 114.400 Motivo:" o similar
+  m = clean.match(/[\$sS]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)\s*(?:motivo|para|origen|\.)/i);
   if (m) {
     const n = normalizeAmount(m[1]);
     if (n && n > 0) return n;
   }
-  m = clean.match(/[\$s]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)/i);
+
+  // 3. $ seguido de miles con punto
+  m = clean.match(/[\$sS]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)/i);
   if (m) {
     const n = normalizeAmount(m[1]);
     if (n && n > 0) return n;
   }
-  m = clean.match(/[\$s]\s*(\d{4,}(?:,[\d]{2})?)/i);
+
+  // 4. $ seguido de números de al menos 4 cifras
+  m = clean.match(/[\$sS]\s*(\d{4,}(?:,[\d]{2})?)/i);
   if (m) {
     const n = normalizeAmount(m[1]);
     if (n && n > 0) return n;
   }
+
   return null;
 }
 

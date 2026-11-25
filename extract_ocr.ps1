@@ -8,6 +8,7 @@ if (-not (Test-Path $FolderPath)) {
 }
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
+Add-Type -AssemblyName System.Drawing
 
 $asTaskGeneric = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
     $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
@@ -76,26 +77,32 @@ function Extract-AmountFromText($text) {
     if (-not $text) { return $null }
     $clean = $text -replace '\s+', ' '
 
-    # 1. Patrones explícitos con palabras clave
-    if ($clean -match '(?i)(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*[\$sS]?\s*([\d.,]+)') {
+    # 1. Patrones explícitos con palabras clave y signo $ o s/S
+    if ($clean -match '(?i)(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*[\$sS]\s*([\d.,]+(?:\s+\d{2})?)') {
+        $n = Normalize-Amount ($Matches[1] -replace '\s+', '')
+        if ($n -and $n -gt 0) { return $n }
+    }
+
+    # 1b. Patrones explícitos sin signo $, pero que NO sean una fecha (evita capturar "23" de "23/NOV/2026" o "23/11")
+    if ($clean -match '(?i)(?:importe\s*total|importe\s*debitado|monto|enviaste|transferiste|importe)[:\s]*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?|\d{3,}(?:,[\d]{2})?)(?!\s*[\/-]|\s*(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic))') {
         $n = Normalize-Amount $Matches[1]
         if ($n -and $n -gt 0) { return $n }
     }
 
     # 2. Mercado Pago: "$ 114.400 Motivo:" o similar
-    if ($clean -match '(?i)[\$s]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)\s*(?:motivo|para|origen|\.)') {
+    if ($clean -match '(?i)[\$sS]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)\s*(?:motivo|para|origen|\.)') {
         $n = Normalize-Amount $Matches[1]
         if ($n -and $n -gt 0) { return $n }
     }
 
     # 3. $ seguido de miles con punto
-    if ($clean -match '[\$s]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)') {
+    if ($clean -match '[\$sS]\s*([\d]{1,3}(?:\.[\d]{3})+(?:,[\d]{2})?)') {
         $n = Normalize-Amount $Matches[1]
         if ($n -and $n -gt 0) { return $n }
     }
 
     # 4. $ seguido de números de al menos 4 cifras
-    if ($clean -match '[\$s]\s*(\d{4,}(?:,[\d]{2})?)') {
+    if ($clean -match '[\$sS]\s*(\d{4,}(?:,[\d]{2})?)') {
         $n = Normalize-Amount $Matches[1]
         if ($n -and $n -gt 0) { return $n }
     }
@@ -238,11 +245,55 @@ foreach ($file in $files) {
             $ocrOp = $engine.RecognizeAsync($bitmap)
             $ocrResult = Invoke-AsyncOp $ocrOp ([Windows.Media.Ocr.OcrResult])
             $rawText = $ocrResult.Text
+            if ($stream) { $stream.Dispose() }
         }
 
         $dest = Parse-Destinatario $rawText
         $origen = Detect-BancoOrigen $rawText
         $montoDoc = Extract-AmountFromText $rawText
+
+        # Fallback para imágenes si el OCR de página completa omitió el bloque de monto
+        if (-not $montoDoc -and $ext -ne ".pdf") {
+            try {
+                $srcBmp = [System.Drawing.Bitmap]::FromFile($file.FullName)
+                if ($srcBmp.Height -gt 300) {
+                    $cropH = [Math]::Min(550, $srcBmp.Height - 100)
+                    $rect = New-Object System.Drawing.Rectangle(0, 100, $srcBmp.Width, $cropH)
+                    $cropBmp = $srcBmp.Clone($rect, $srcBmp.PixelFormat)
+
+                    $ms = New-Object System.IO.MemoryStream
+                    $cropBmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+                    $bytes = $ms.ToArray()
+                    $ms.Dispose()
+                    $cropBmp.Dispose()
+
+                    $memStream = New-Object Windows.Storage.Streams.InMemoryRandomAccessStream
+                    $dataWriter = New-Object Windows.Storage.Streams.DataWriter($memStream)
+                    $dataWriter.WriteBytes($bytes)
+                    $storeOp = $dataWriter.StoreAsync()
+                    $null = Invoke-AsyncOp $storeOp ([uint32])
+                    $memStream.Seek(0) | Out-Null
+
+                    $decoderOp2 = [Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($memStream)
+                    $decoder2 = Invoke-AsyncOp $decoderOp2 ([Windows.Graphics.Imaging.BitmapDecoder])
+                    $bitmapOp2 = $decoder2.GetSoftwareBitmapAsync()
+                    $bitmap2 = Invoke-AsyncOp $bitmapOp2 ([Windows.Graphics.Imaging.SoftwareBitmap])
+                    $ocrOp2 = $engine.RecognizeAsync($bitmap2)
+                    $ocrResult2 = Invoke-AsyncOp $ocrOp2 ([Windows.Media.Ocr.OcrResult])
+                    $memStream.Dispose()
+
+                    $pass2Text = $ocrResult2.Text
+                    $montoDoc2 = Extract-AmountFromText $pass2Text
+                    if ($montoDoc2) {
+                        $montoDoc = $montoDoc2
+                        $rawText = $rawText + " " + $pass2Text
+                    }
+                }
+                $srcBmp.Dispose()
+            } catch {
+                # Fallback silencioso
+            }
+        }
 
         $results[$file.Name] = @{
             destinatario = $dest
