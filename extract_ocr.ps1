@@ -219,8 +219,9 @@ foreach ($file in $files) {
             $storageFile = Invoke-AsyncOp $fileOp ([Windows.Storage.StorageFile])
             $docOp = [Windows.Data.Pdf.PdfDocument]::LoadFromFileAsync($storageFile)
             $doc = Invoke-AsyncOp $docOp ([Windows.Data.Pdf.PdfDocument])
-            if ($doc.PageCount -gt 0) {
-                $page = $doc.GetPage(0)
+            $maxPages = [Math]::Min(2, $doc.PageCount)
+            for ($p = 0; $p -lt $maxPages; $p++) {
+                $page = $doc.GetPage($p)
                 $memStream = New-Object Windows.Storage.Streams.InMemoryRandomAccessStream
                 $renderOp = $page.RenderToStreamAsync($memStream)
                 Invoke-AsyncAction $renderOp
@@ -231,7 +232,8 @@ foreach ($file in $files) {
                 $bitmap = Invoke-AsyncOp $bitmapOp ([Windows.Graphics.Imaging.SoftwareBitmap])
                 $ocrOp = $engine.RecognizeAsync($bitmap)
                 $ocrResult = Invoke-AsyncOp $ocrOp ([Windows.Media.Ocr.OcrResult])
-                $rawText = $ocrResult.Text
+                $memStream.Dispose()
+                if ($rawText) { $rawText += " " + $ocrResult.Text } else { $rawText = $ocrResult.Text }
             }
         } else {
             $fileOp = [Windows.Storage.StorageFile]::GetFileFromPathAsync($file.FullName)

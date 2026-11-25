@@ -181,7 +181,7 @@ function extractRealizaFromText(text) {
     let res = val.replace(/^(?:origen\s+y\s+destino|y\s+destino|apellido\s*y\s*nombre|titular|nombre|cuenta|de|desde|origen)[:\s]*/i, '').trim();
     res = res.replace(/^(?:y\s+destino|de|desde|cuenta|origen)[:\s]*/i, '').trim();
     // quitar sufijos comunes
-    res = res.replace(/\s+(?:mercado\s*pago|naranja\s*x|cuenta\s*dni|santander|banco|personal\s*pay).*$/i, '').trim();
+    res = res.replace(/\s+(?:mercado\s*pago|naranja\s*x|cuenta\s*dni|santander|banco|personal\s*pay|brubank).*$/i, '').trim();
     return res;
   };
 
@@ -199,35 +199,56 @@ function extractRealizaFromText(text) {
     if (res.length > 2 && !isEmpresa(res) && !/(?:comprobante|ejecuci[oó]n|plazo)/i.test(res)) return res;
   }
 
-  // 3. Naranja X: "Cuenta origen Ruth Brenda Silvano Naranja X..."
+  // 3. Brubank: "Origen Titular CUIT / CUIL Banco Origen Santander ... 30-70865775-8 Maria Rosa Villegas 27-29045858-2 Brubank"
+  m = clean.match(/\b30-?70865775-?8\s+([A-Za-zÁ-ú\s]{3,40}?)\s+\d{2}-\d{8}-\d/i);
+  if (m && !isEmpresa(m[1])) {
+    const res = cleanName(m[1]);
+    if (res.length > 2 && !isEmpresa(res)) return res;
+  }
+
+  // 4. Titular genérico (Brubank, Santander, etc.): "Titular: Juan Perez" o "Titular Juan Perez CUIT..."
+  m = clean.match(/\btitular[:\s]+([A-Za-zÁ-ú\s]{3,45}?)(?=\s+(?:cuit|cuil|cbu|cvu|banco|cuenta|para|origen|destinatario|\$|$))/i);
+  if (m && !isEmpresa(m[1])) {
+    const res = cleanName(m[1]);
+    if (res.length > 2 && !isEmpresa(res)) return res;
+  }
+
+  // 5. BNA+ PDF: "De: Apellido y Nombre ONTIVEROS FLORENCIA CUIT/CUIL..."
+  m = clean.match(/\bde[:\s]+apellido\s*y\s*nombre[:\s]+([A-Za-zÁ-ú\s]{3,45}?)(?=\s+(?:cuit|cuil|cuenta|banco|para|\$|$))/i);
+  if (m && !isEmpresa(m[1])) {
+    const res = cleanName(m[1]);
+    if (res.length > 2 && !isEmpresa(res)) return res;
+  }
+
+  // 6. Naranja X: "Cuenta origen Ruth Brenda Silvano Naranja X..."
   m = clean.match(/cuenta\s+origen[:\s]+([A-Za-zÁ-ú\s]{3,45}?)(?=\s+(?:naranja\s*x|cbu|cuil|cuit|cuenta\s+destino|\$|$))/i);
   if (m && !isEmpresa(m[1])) {
     const res = cleanName(m[1]);
     if (res.length > 2 && !isEmpresa(res) && !/(?:comprobante|ejecuci[oó]n|plazo)/i.test(res)) return res;
   }
 
-  // 4. Macro: "Desde ..2554 VAZQUEZ Y RANURI ESTELLA MARIS Cuenta Banco Macro..."
+  // 7. Macro: "Desde ..2554 VAZQUEZ Y RANURI ESTELLA MARIS Cuenta Banco Macro..."
   m = clean.match(/desde\s+(?:\.{1,4}\d+|\d+)?\s*([A-Za-zÁ-ú\s]{3,45}?)(?=\s+(?:cuenta|banco|cuil|cuit|monto|\$|$))/i);
   if (m && !isEmpresa(m[1])) {
     const res = cleanName(m[1]);
     if (res.length > 2 && !isEmpresa(res) && !/(?:comprobante|ejecuci[oó]n|plazo)/i.test(res)) return res;
   }
 
-  // 5. Personal Pay / otros: "Envía JUDIT ELIZABET ESPINOZA CUIT/CUIL..."
+  // 8. Personal Pay / otros: "Envía JUDIT ELIZABET ESPINOZA CUIT/CUIL..."
   m = clean.match(/\b(?:env[ií]a|emisor|ordenante|titular\s+origen)[:\s]+([A-Za-zÁ-ú\s]{3,45}?)(?=\s+(?:cuit|cuil|cbu|cvu|banco|cuenta|para|destinatario|\$|$))/i);
   if (m && !isEmpresa(m[1])) {
     const res = cleanName(m[1]);
     if (res.length > 2 && !isEmpresa(res) && !/(?:comprobante|ejecuci[oó]n|plazo)/i.test(res)) return res;
   }
 
-  // 6. Genérico: "De: Juan Perez"
+  // 9. Genérico: "De: Juan Perez"
   m = clean.match(/\bde[:\s]+([A-Za-zÁ-ú\s]{3,40}?)(?=\s+(?:para|a\s+la\s+cuenta|cuit|cuil|cbu|cvu|\$|$))/i);
   if (m && !isEmpresa(m[1])) {
     const res = cleanName(m[1]);
     if (res.length > 2 && !isEmpresa(res) && !/(?:comprobante|ejecuci[oó]n|plazo)/i.test(res)) return res;
   }
 
-  // 7. Santander sin nombre: extraer cuenta débito
+  // 10. Santander sin nombre: extraer cuenta débito
   m = clean.match(/cuenta\s+d[eé]bito[^\d]*(?:CTA|CC)?\s*\$?\s*([\d\/\-]+)/i);
   if (m) {
     return `Cuenta débito ${m[1]}`;
@@ -244,12 +265,20 @@ function extractCodigoReferenciaFromText(text) {
   let m = clean.match(/c[oó]digo\s+de\s+referencia[:\s]*(\w+)/i);
   if (m) return m[1];
 
-  // 2. Mercado Pago / general: "N.0 de operación de Mercado Pago 185396793096" o "N° de operación 3261170095"
-  m = clean.match(/n[.°0ºoO]*\s+de\s+operaci[oó]n(?:\s+de\s+mercado\s+pago)?[:\s]*(\d+)/i);
-  if (m) return m[1];
+  // 2. BNA+ / Naranja X / Santander / General: "Número de transacción 00586244", "Código de transacción 31c40194..."
+  m = clean.match(/(?:n[úu]mero|n[.°0ºoO]*|c[oó]digo)\s+de\s+transacci[oó]n[:\s]*([a-zA-Z0-9\-]+)/i);
+  if (m) {
+    const val = m[1];
+    // En BNA+ PDF el número de transacción puede ser un UUID pero también incluye "Número de operación 00931777" (8 dígitos)
+    if (val.length > 15) {
+      const opMatch = clean.match(/(?:n[úu]mero|n[.°0ºoO]*)\s+de\s+operaci[oó]n[:\s]*(\d{6,10})/i);
+      if (opMatch) return opMatch[1];
+    }
+    return val;
+  }
 
-  // 3. Naranja X: "Código de transacción 31c40194-c999-4260-bOb7-9c4dOae78c01"
-  m = clean.match(/c[oó]digo\s+de\s+transacci[oó]n[:\s]*([a-zA-Z0-9\-]+)/i);
+  // 3. Mercado Pago / BNA+ / General: "N° de operación 3261170095", "Número de operación 00931777"
+  m = clean.match(/(?:n[úu]mero|n[.°0ºoO]*)\s+de\s+operaci[oó]n(?:\s+de\s+mercado\s+pago)?[:\s]*([a-zA-Z0-9\-]+)/i);
   if (m) return m[1];
 
   // 4. Código de identificación / Coelsa ID / Id Bancario
@@ -267,6 +296,14 @@ function extractCodigoReferenciaFromText(text) {
   if (m) return m[1];
 
   m = clean.match(/(?:comprobante|referencia|control)[:\s]*(\d{4,})/i);
+  if (m) return m[1];
+
+  // Fallback sin acentos por problemas de codificación UTF-8
+  const norm = clean.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  m = norm.match(/(?:numero|n[.°0ºoo]*|codigo)\s+de\s+transaccion[:\s]*([a-z0-9\-]+)/i);
+  if (m) return m[1];
+
+  m = norm.match(/(?:numero|n[.°0ºoo]*)\s+de\s+operacion(?:\s+de\s+mercado\s+pago)?[:\s]*([a-z0-9\-]+)/i);
   if (m) return m[1];
 
   return "";
@@ -438,12 +475,19 @@ async function generarExcelCampana(campanaCode) {
 
     let rawText = "";
     if (ext === '.pdf') {
-      if (ocrCache[fileName] && ocrCache[fileName].rawText) {
+      if (ocrCache[fileName] && ocrCache[fileName].rawText && /p[aá]gina\s+2|transacci[oó]n|operaci[oó]n/i.test(ocrCache[fileName].rawText)) {
         rawText = ocrCache[fileName].rawText;
       } else {
-        rawText = await extractPdfText(fullPath);
-        ocrCache[fileName] = { rawText };
-        hayNuevosOcr = true;
+        const pdfText = await extractPdfText(fullPath);
+        if (pdfText) {
+          rawText = (ocrCache[fileName] && ocrCache[fileName].rawText)
+            ? (ocrCache[fileName].rawText + "\n" + pdfText)
+            : pdfText;
+          ocrCache[fileName] = { ...(ocrCache[fileName] || {}), rawText };
+          hayNuevosOcr = true;
+        } else if (ocrCache[fileName] && ocrCache[fileName].rawText) {
+          rawText = ocrCache[fileName].rawText;
+        }
       }
     } else {
       const cached = ocrCache[fileName];
@@ -455,7 +499,15 @@ async function generarExcelCampana(campanaCode) {
     const fecha = extractDateFromText(rawText);
     const desde = detectBancoOrigenFromText(rawText);
     const para = parseDestinatarioFromText(rawText);
-    const realiza = extractRealizaFromText(rawText);
+    let realiza = extractRealizaFromText(rawText);
+
+    // Origen es el dato que va en "Realiza". A menudo es el mismo nombre que en el archivo.
+    // Si no se extrajo un titular diferente o si es el mismo revendedor, se duplica Revendedor
+    // para que no queden celdas en blanco.
+    if (!realiza || realiza.trim() === '') {
+      realiza = parsedFile.revendedor || "";
+    }
+
     const codigoRef = extractCodigoReferenciaFromText(rawText);
 
     rows.push({
